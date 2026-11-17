@@ -1,0 +1,21 @@
+# Exact versions verified on Windows 11 / Python 3.14.3 (Issue #2). Install: pip install -r requirements-lock.txt -e .
+# numpy is pinned to 2.4.6: on the development machine, Windows Application Control blocked
+# numpy 2.5.5's random/_philox extension (an OS policy issue, not a compatibility issue).
+ast_serialize==0.13.1
+colorama==0.4.6
+coverage==7.17.3
+hypothesis==6.170.15
+iniconfig==2.3.1
+librt==0.16.0
+mypy==2.4.1
+mypy_extensions==1.2.0
+numpy==2.4.6
+packaging==26.3
+pathspec==1.1.1
+pluggy==1.7.0
+Pygments==2.21.0
+pytest==9.2.0
+pytest-cov==7.1.0
+ruff==0.17.5
+sortedcontainers==2.4.0
+typing_extensions==4.16.0

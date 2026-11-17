@@ -146,7 +146,7 @@ Design notes:
 | Job | Matrix | Steps |
 |---|---|---|
 | `quality` | ubuntu-latest × Python 3.14 | `ruff check .`, `ruff format --check .`, `mypy src/robocoord` |
-| `tests` | ubuntu-latest × Python {3.12, 3.13, 3.14}; windows-latest × Python 3.14 | Install CPU-only PyTorch (CPU wheel index on Linux), `pip install -e ".[dev]"`, `pytest` (fast suite only) |
+| `tests` | ubuntu-latest × Python {3.12, 3.13, 3.14}; windows-latest × Python 3.14 | `pip install -e ".[dev]"`, `pytest` (fast suite only); from Issue #5 also CPU-only PyTorch (CPU wheel index on Linux) |
 
 Slow, training and e2e tests run locally before an issue is closed (`05` §A.5), not in CI. CI results are recorded in the verification log by the student's report or a screenshot. Claude cannot see GitHub-hosted runs unless the student shares them.
 
@@ -294,6 +294,23 @@ class TraceWriter: ...
 
 `ConflictEvent` is a frozen dataclass `(t, kind, entities)`. `WorldView` is read-only.
 
+**Coordinator contract (as implemented in Issue #2).** The engine composes the strategic and tactical layers behind one protocol, so the auction (Issue #4) and the planners with their path monitor (Issue #3) plug in without engine changes:
+
+```python
+class AssignmentAPI(Protocol):            # implemented by Engine; passed to every coordinator call
+    oracle: DistanceOracle                # shared cached BFS distances (benefits, reachability)
+    streams: SeedStreams                  # named random streams; planners use streams.generator("planner")
+    def assign_task(self, robot: int, task: int) -> None     # state-machine checked
+    def unassign_task(self, robot: int) -> None
+class Coordinator(Protocol):
+    name: str
+    def reset(self, view: WorldView, api: AssignmentAPI) -> None
+    def update(self, view: WorldView, api: AssignmentAPI) -> None          # pipeline step 3
+    def suggested_actions(self, view: WorldView) -> Sequence[Action] | None  # planner advice, or None
+```
+
+`Controller.act(view, observations)` is the operational-level protocol. Known additive extension points, not defects: `WorldView` will gain the reference-path data needed by the RL observation (Issue #3/#5), and the shield (Issue #4) slots into the existing pipeline step 5.
+
 ### 5.4 `planning`: constraints, procedure, A\*, RRT\*, monitor (Issue #3)
 
 ```python
@@ -374,10 +391,14 @@ The viewer highlights proposed conflicts, shield interventions and deviations fr
 ## 6. Algorithm selection mechanism
 
 ```python
-PLANNERS:    {"astar": AStarPlanner, "rrtstar": RRTStarPlanner}
-ALLOCATORS:  {"auction": AuctionAllocator, "sequential": SequentialAuctionAllocator}
-CONTROLLERS: {"baseline": BaselineController, "reference": ReferenceFollower,
-              "madql": LearnedController.from_madql, "ppo": LearnedController.from_ppo}
+PLANNERS: {"astar": AStarPlanner, "rrtstar": RRTStarPlanner}
+ALLOCATORS: {"auction": AuctionAllocator, "sequential": SequentialAuctionAllocator}
+CONTROLLERS: {
+    "baseline": BaselineController,
+    "reference": ReferenceFollower,
+    "madql": LearnedController.from_madql,
+    "ppo": LearnedController.from_ppo,
+}
 ```
 
 Each factory takes its typed config section (e.g. `[planner.rrtstar] max_iterations = 2000`, `neighbor_index = "kdtree"`). The same names are used by the CLI, viewer and experiment specs. Unknown names fail at load time with the valid choices listed.
@@ -479,3 +500,31 @@ Package name: **`robocoord`**.
 - No global state and no hidden randomness: every sampling function takes a `Generator`.
 - Units: cells and steps.
 - Python only. No compiled extensions of our own.
+
+---
+
+## Appendix A — Scenario file format (implemented in Issue #2)
+
+Scenarios are TOML files loaded by `robocoord.scenario.load_scenario` and validated before use; every validation error names the offending field (e.g. `tasks[2].pickup: cell (3, 4) is a static obstacle`). Coordinates are `[x, y]` with `y` growing **upwards**; in `map.rows` the **first string is the top row**. Examples in `configs/scenarios/` (all are loaded, validated and run by the test suite):
+
+| File | Shows | Run with |
+|---|---|---|
+| `demo_delivery.toml` | 3 scripted robots, 4 tasks, a patrolling and a bouncing obstacle, a map event; all tasks delivered | default (`scripted`) |
+| `corridor_queue.toml` | the safety layer: vertex conflicts, cascade "blocked moves", a map event deferred until the convoy has passed (hand-computed metrics in `tests/integration/test_review_findings.py`) | default (`scripted`) |
+| `random_warehouse.toml` | generated warehouse, random placement, Bernoulli arrivals; no allocator yet, so 0 deliveries is expected | `--controller random` |
+| `rooms_dynamic.toml` | generated rooms map, random placement, Poisson arrivals, map events | `--controller random` |
+
+
+| Section | Keys | Notes |
+|---|---|---|
+| `[scenario]` | `name` (required), `seed` (0), `max_steps` (100), `num_priorities` (3), `description` | `--seed` on the CLI overrides `seed` |
+| `[map]` | exactly one of `rows = [...]`, `file = "x.map"` (MovingAI format, relative to the TOML file), or `[map.generator]` with `kind` ∈ {`random` (`density`), `rooms` (`room_size`), `warehouse` (`shelf_length`), `empty`}, `width`, `height` | Generators use the `map` random stream and keep only the largest connected free component |
+| `[[robots]]` | `start = [x, y]` | Robot ids follow file order |
+| `[[obstacles]]` | `start`, `model` ∈ {`random_walk`, `patrol` (`waypoints = [[x,y], ...]`), `bounce` (`direction` ∈ up/down/left/right)} | Each obstacle has its own derived random generator |
+| `[[tasks]]` | `pickup`, `dropoff`, `priority` (1..P, default 1), `release` (default 0) | Task ids follow file order; pickup→dropoff must be reachable |
+| `[placement]` | `robots`, `obstacles`, `tasks`, `max_release`, `priorities` | Optional random placement (from the `map` stream), added after explicit entries |
+| `[arrivals]` | `kind` ∈ {`none`, `bernoulli`, `poisson`}, `rate`, `priorities` (P probabilities), `until` | Tasks generated during the episode (from the `tasks` stream) |
+| `[[map_events]]` | `time`, `cell`, `action` ∈ {`block`, `unblock`} | A block on an occupied cell is deferred until it is vacated |
+| `[script]` | `actions` (one string of S/U/D/L/R per robot; spaces ignored), `assignments` (task-index list per robot) | Used only by the scripted demo controller/coordinator; a cancelled feasible move is retried on the next step |
+
+**Time convention (implemented).** Step `t` maps state `t` to state `t+1`. Events with time `t` and tasks with release `t` take effect at the start of step `t`. Pickups and deliveries are registered at `t+1`, when the robot stands on the goal cell after the step's move. Task completion time `C_j` is that `t+1`. **Termination:** all tasks delivered and no arrivals can still occur; a scenario that never contains a task is a pure-motion sandbox and runs to `max_steps`. The trace `t` of a step record is the time *after* the step.

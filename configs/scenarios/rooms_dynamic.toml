@@ -1,0 +1,40 @@
+# Generated rooms-and-doors map, 5 random robots, 4 random-walk obstacles, 5 random tasks and
+# Poisson arrivals. No script and no allocator yet (auction: Issue #4), so tasks stay unassigned;
+# the random controller (masked random moves) shows the dynamics and the safety layer working.
+#
+#   python -m robocoord simulate --scenario configs/scenarios/rooms_dynamic.toml --controller random
+
+[scenario]
+name = "rooms-dynamic"
+description = "Generated 21x13 rooms map: 5 robots, 4 random-walk obstacles, Poisson task arrivals"
+seed = 11
+max_steps = 60
+
+[map.generator]
+kind = "rooms"
+width = 21
+height = 13
+room_size = 4
+
+[placement]
+robots = 5
+obstacles = 4
+tasks = 5
+max_release = 12
+priorities = [0.4, 0.4, 0.2]
+
+[arrivals]
+kind = "poisson"
+rate = 0.08
+priorities = [0.4, 0.4, 0.2]
+until = 45
+
+[[map_events]]
+time = 20
+cell = [4, 2]
+action = "block"
+
+[[map_events]]
+time = 40
+cell = [4, 2]
+action = "unblock"

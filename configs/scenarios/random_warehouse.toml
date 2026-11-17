@@ -1,0 +1,30 @@
+# Stress scenario: generated warehouse, randomly placed robots and obstacles, Bernoulli task
+# arrivals. Without an allocator (Issue #4) tasks are not assigned; run it with the random
+# controller to watch moving obstacles and the arbiter preventing conflicts.
+#
+#   python -m robocoord simulate --scenario configs/scenarios/random_warehouse.toml --controller random
+
+[scenario]
+name = "random-warehouse"
+description = "Generated 20x11 warehouse, 6 robots, 4 random-walk obstacles, task arrivals"
+seed = 1
+max_steps = 80
+
+[map.generator]
+kind = "warehouse"
+width = 20
+height = 11
+shelf_length = 4
+
+[placement]
+robots = 6
+obstacles = 4
+tasks = 4
+max_release = 10
+priorities = [0.5, 0.3, 0.2]
+
+[arrivals]
+kind = "bernoulli"
+rate = 0.05
+priorities = [0.5, 0.3, 0.2]
+until = 60
