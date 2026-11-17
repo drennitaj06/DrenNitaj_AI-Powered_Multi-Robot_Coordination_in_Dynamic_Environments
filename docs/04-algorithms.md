@@ -73,6 +73,17 @@ Note on `target` for staying robots: a robot with $a_i = \textsf{stay}$ is liste
 
 ---
 
+**Implementation notes (Issue #2).**
+- Implemented in `src/robocoord/sim/conflicts.py` as designed (`detect_conflicts`, `arbitrate`, `physical_violations`).
+- The engine checks the physical-collision invariant after every step and raises `PhysicalCollisionError` on violation (never observed in tests).
+- The property test compares detection and arbitration against an independent naive O(N²) oracle on 600 generated situations (grids up to 6×6, up to 8 robots and 4 obstacles, unmasked random proposals, obstacle moves from the real move rule).
+- Obstacle move rule: proposals are also rejected if an earlier obstacle already claimed the cell in the same step. This makes the fixed processing order explicit; model §2 is updated.
+- **Path efficiency** is computed per completed *leg*: Σ optimal static distance at leg start / Σ moves made during the leg. Legs aborted by unassignment are excluded.
+- Metrics added during the final review: `blocked_goal_robot_steps` (robots holding a task whose goal is statically unreachable, evaluated on the map after the step's map events), per-100-robot-step rates for blocked moves and for each conflict kind. The `physical_collisions` counter is 0 by construction because the engine raises on any violation.
+- The scripted demo controller retries a statically feasible move that the arbiter cancelled, so scripted robots wait instead of skipping route steps. Symmetric head-on situations remain deadlocks for scripted robots, which is expected: no planner or learning is involved yet.
+
+---
+
 ## 2. Grid search
 
 ### 2.1 BFS distance field
@@ -88,6 +99,12 @@ Note on `target` for staying robots: a robot with $a_i = \textsf{stay}$ is liste
 **Caching.** The `DistanceOracle` caches fields keyed by `(target, grid.version)` with LRU eviction (default 256 fields, ≈ 4 MB for 64×64).
 
 **Tests.** Floyd–Warshall reference on small grids; unreachable components; cache invalidation after map events.
+
+**Implementation notes (Issue #2).**
+- `src/robocoord/core/distance.py`. Fields are cached read-only per `(target, grid.version)`.
+- `capped_distance` implements $\bar D$.
+- `connected_components` (also O(V)) is used by the map generators, which keep only the largest free component so that generated maps are connected (property-tested).
+- The Floyd–Warshall comparison is a Hypothesis property test (200 random grids up to 6×6).
 
 ### 2.2 Shared planning constraints and procedure
 

@@ -52,7 +52,7 @@ A finite set $K$ of dynamic obstacles. Obstacle $k$ has position $z_k(t) \in \ma
 | Bounce | Keep the current direction $\delta_k$; reverse $\delta_k$ when the next cell is blocked |
 | Data-driven (Issue #7, conditional) | Correlated random walk with parameters estimated from trajectory data |
 
-**Obstacle move rule** [Asm A-5]. The proposal is accepted only if it is in bounds and not occupied at time $t$ by a static obstacle, a robot or another dynamic obstacle. Otherwise $z_k(t+1) = z_k(t)$. Obstacles are processed in a fixed index order, so the outcome is deterministic. All randomness comes from the obstacle's own seeded generator. Obstacle moves at step $t$ do **not** depend on the robots' actions at step $t$, only on positions at time $t$. This makes counterfactual conflict evaluation (§9.2) well-defined.
+**Obstacle move rule** [Asm A-5]. The proposal is accepted only if it is in bounds, not occupied at time $t$ by a static obstacle, a robot or another dynamic obstacle, and not already claimed by an earlier obstacle (lower index) in the same step. Otherwise $z_k(t+1) = z_k(t)$. Obstacles are processed in a fixed index order, so the outcome is deterministic. All randomness comes from the obstacle's own seeded generator. Obstacle moves at step $t$ do **not** depend on the robots' actions at step $t$, only on positions at time $t$. This makes counterfactual conflict evaluation (§9.2) well-defined.
 
 **Velocity and prediction.** $v_k(t) = z_k(t) - z_k(t-1)$. The one-step constant-velocity prediction is $\hat z_k(t+1) = z_k(t) + v_k(t)$, kept only if it is a free in-bounds cell. It is a heuristic: obstacles may turn or stop.
 
