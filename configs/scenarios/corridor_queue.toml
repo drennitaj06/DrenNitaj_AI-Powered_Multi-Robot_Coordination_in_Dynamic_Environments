@@ -1,0 +1,62 @@
+# Scripted demo of the safety layer: three robots queue in a one-cell-wide corridor.
+#
+# Robot 0 (front) waits 4 steps before moving; robots 1 and 2 behind it keep trying to advance.
+# Every step during the wait:
+#   * robot 1 tries to move into robot 0's cell        -> proposed conflict (RRv), cancelled;
+#   * robot 2 tries to move into robot 1's (frozen) cell -> cascade: "blocked move", not a conflict.
+# When robot 0 starts moving, all three advance in lockstep (following moves are legal).
+#
+# A map event also schedules a wall at (4, 1) at t = 1, while robots occupy that cell: the block is
+# DEFERRED until the whole convoy has passed, so a wall never appears on top of a robot.
+#
+#   python -m robocoord simulate --scenario configs/scenarios/corridor_queue.toml
+
+[scenario]
+name = "corridor-queue"
+description = "3 robots queue in a corridor: conflicts, blocked moves, deferred map event"
+seed = 3
+max_steps = 40
+
+[map]
+rows = [
+  "############",
+  "#..........#",
+  "############",
+]
+
+[[robots]]
+start = [4, 1]   # robot 0 (front of the queue)
+
+[[robots]]
+start = [3, 1]   # robot 1
+
+[[robots]]
+start = [2, 1]   # robot 2 (back of the queue)
+
+[[tasks]]        # task 0 (priority 3): pickup right ahead of robot 0
+pickup = [5, 1]
+dropoff = [10, 1]
+priority = 3
+
+[[tasks]]        # task 1 (priority 2): pickup is robot 0's starting cell
+pickup = [4, 1]
+dropoff = [9, 1]
+priority = 2
+
+[[tasks]]        # task 2 (priority 1): pickup is robot 1's starting cell
+pickup = [3, 1]
+dropoff = [8, 1]
+priority = 1
+
+[[map_events]]
+time = 1
+cell = [4, 1]
+action = "block"
+
+[script]
+actions = [
+  "SSSS RRRRRR",   # robot 0: wait 4 steps, then 1 step to pickup (5,1) and 5 to drop-off (10,1)
+  "RRRRRR",        # robot 1: 1 step to pickup (4,1), then 5 to drop-off (9,1); a cancelled move is retried
+  "RRRRRR",        # robot 2: 1 step to pickup (3,1), then 5 to drop-off (8,1); a cancelled move is retried
+]
+assignments = [[0], [1], [2]]
