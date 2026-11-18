@@ -191,6 +191,11 @@ Replanning triggers (at most one planner call per robot per step):
 
 The monitor is **controller-agnostic**: it applies identically to the baseline, reference-follower and learned controllers. Every planner call is logged with its trigger.
 
+*Clarifications (Issue #3; implementation notes in `04` §5.2).*
+- In T2, "excluding the goal" refers to the dynamic set $B_i$, which never contains the goal anyway. The goal is still checked against $S(t)$ at every step, so that a map event on the goal leads to the `unreachable` policy of §5.3.
+- For a `degraded` plan, T2 checks $S(t)$ only. Dynamic re-checks of degraded plans are made by T6.
+- T4 fires only for an *occupied* next cell and never targets the goal. Two robots contending for the same free cell are frozen by the arbiter without a T4. Resolving such deadlocks is left to the controllers.
+
 **Suggested action.** $\hat a_i^{\text{plan}}$ is the action moving from $x_i$ to $c_{\ell_i+1}$, or $\textsf{stay}$ if the robot has no valid plan or is at its goal.
 
 ### 5.5 Reference plans vs executed motion
@@ -201,7 +206,7 @@ The monitor is **controller-agnostic**: it applies identically to the baseline, 
 |---|---|---|
 | Returned path valid for the **query snapshot** (free of $S(t) \cup B_i(t)$, 4-connected, correct endpoints) | Guaranteed | Guaranteed (discretisation lemma) |
 | Decides reachability on the snapshot | Guaranteed (complete on a finite graph) | Guaranteed via BFS guard (Lemma 5.1); the RRT\* search itself is not complete with a finite budget |
-| Optimal on the snapshot | Guaranteed: minimum $\kappa_i$-cost among 4-connected lattice paths | Conditional: asymptotically optimal ($n \to \infty$) in Euclidean length when $Q_i = \varnothing$ or $\lambda_{\text{prox}} = 0$, under the radius condition of `04` §3. Not claimed for the weighted cost or for finite budgets. Not step-optimal after discretisation. |
+| Optimal on the snapshot | Guaranteed: minimum $\kappa_i$-cost among 4-connected lattice paths | Not claimed. The implemented Karaman–Frazzoli radius ($\propto (\log n/n)^{1/d}$) does not satisfy the corrected asymptotic-optimality condition of Solovey et al. (2020), which needs exponent $1/(d+1)$ (`04` §3.4–3.5). Not claimed for the weighted cost or for finite budgets either. Not step-optimal after discretisation. Convergence is measured empirically (E1c). |
 | Valid at later times | Not claimed: obstacles move, map events occur, other robots are not modelled | Not claimed (same reasons) |
 
 **The executed trajectory is chosen by the controller.** MADQL, PPO, the baseline and the reference follower select $a_i(t)$ freely within the mask. They may follow, wait, yield, side-step or leave the reference path. Planner properties therefore **do not transfer** to executed trajectories or to task completion.
@@ -492,7 +497,7 @@ The RL base reward of §7 is a *scalarisation* of it. The evaluation reports the
 | G4 | A\* path is $\kappa$-optimal and valid for the query snapshot; unreachability correctly reported | **Guaranteed** | `04` §2.2 |
 | G5 | RRT\* path is valid for the query snapshot; best cost non-increasing in iterations | **Guaranteed** | `04` §3 |
 | G6 | Continuous feasibility ⇔ 4-connected grid feasibility under the supercover rule | **Guaranteed** | Lemma 5.1 |
-| G7 | RRT\* asymptotic optimality | **Conditional**: $n \to \infty$, Euclidean cost ($Q_i = \varnothing$ or $\lambda_{\text{prox}} = 0$), radius constant per `04` §3 | Karaman & Frazzoli 2011; Solovey et al. 2020 |
+| G7 | RRT\* asymptotic optimality | **Not claimed for the implemented radius** (revised in Issue #3, see `verification-log.md` V-6; earlier: "Conditional"). The implementation uses the Karaman–Frazzoli radius $\min(\gamma(\log n/n)^{1/d}, \eta)$. Solovey et al. (2020) identified a logical gap in the original optimality proof and proved asymptotic optimality (Euclidean cost) for $\gamma(\log n/n)^{1/(d+1)}$ with a stated lower bound on $\gamma$. The implemented exponent $1/d$ does not meet that condition for any constant. Finite-budget convergence is measured (E1c). | Karaman & Frazzoli 2011 (Thm 38, original radius); Solovey, Janson, Schmerling, Frazzoli & Pavone 2020 (arXiv:1909.09688, Thm 1, corrected radius) |
 | G8 | RRT\* finds a path within a finite budget | **Not claimed** (measured: success rate) | — |
 | G9 | RRT\* runtime $O(n \log n)$ | **Not claimed**. Unconditional and conditional bounds in `04` §3.6 | — |
 | G10 | Auction returns a maximum-cardinality matching, optimal for integer benefits (within $k\varepsilon$ for fixed $\varepsilon$) | **Guaranteed** | `04` §4.1, §8 |

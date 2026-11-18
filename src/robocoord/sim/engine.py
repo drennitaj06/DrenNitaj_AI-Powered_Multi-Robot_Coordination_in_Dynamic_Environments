@@ -11,7 +11,8 @@ Step ``t`` → ``t + 1``:
 6. conflict detection + arbitration; physical-collision invariant check (G1);
 7. counterfactual conflict sets for the reference proposal (when suggestions exist);
 8. pickups and deliveries at ``t + 1``;
-9. (path monitor bookkeeping — Issue #3);
+9. path monitor bookkeeping: done by a planning coordinator at the start of the next step's
+   pipeline step 3 (it sees the positions at ``t + 1``, which is equivalent);
 10. metrics and trace.
 
 The RL wrapper (Issue #5) calls :meth:`Engine.prepare_step` and :meth:`Engine.apply_actions`
@@ -39,7 +40,7 @@ from robocoord.sim.conflicts import (
     detect_conflicts,
     physical_violations,
 )
-from robocoord.sim.coordinator import Coordinator, NullCoordinator
+from robocoord.sim.coordinator import Coordinator, NullCoordinator, PlanReporting
 from robocoord.sim.metrics import EpisodeMetrics, MetricsRecorder
 from robocoord.sim.trace import TraceWriter
 from robocoord.sim.view import (
@@ -141,6 +142,7 @@ class Engine:
         scenario.validate()
         self.scenario = scenario
         self.coordinator: Coordinator = coordinator or NullCoordinator()
+        self._reporting = self.coordinator if isinstance(self.coordinator, PlanReporting) else None
         self.seed = scenario.seed if seed is None else seed
         self.trace = trace
         self.stop_when_done = stop_when_done
@@ -319,6 +321,11 @@ class Engine:
                 )
             )
 
+        if self._reporting is not None and pending.view.suggested is not None:
+            self.metrics.record_adherence(
+                nonidle, self._reporting.plan_valid(), proposal, pending.view.suggested
+            )
+
         # commit motion
         moved = [resolution.positions[i] != positions[i] for i in range(n)]
         for r, pos in zip(self.robots, resolution.positions, strict=True):
@@ -380,6 +387,8 @@ class Engine:
             terminated=self.terminated,
             truncated=self.truncated,
         )
+        if self.done and self._reporting is not None:
+            self._reporting.finish(self._build_view(None))
         if self.trace is not None:
             self.trace.write(self._step_record(outcome, pending))
             if self.done:
@@ -392,7 +401,10 @@ class Engine:
         return self.apply_actions(controller(view))
 
     def summary(self) -> EpisodeMetrics:
-        return self.metrics.summary(self.book, self.t)
+        metrics = self.metrics.summary(self.book, self.t)
+        if self._reporting is not None:
+            metrics.extra["planning"] = self._reporting.episode_stats()
+        return metrics
 
     # ================================================================== views and traces
     def _build_view(self, suggested: tuple[Action, ...] | None) -> WorldView:
@@ -479,6 +491,8 @@ class Engine:
             ]
         if out.reference_events is not None:
             rec["reference_events"] = [e.to_json() for e in sorted(out.reference_events)]
+        if self._reporting is not None:
+            rec.update(self._reporting.trace_fields())
         return rec
 
     # ================================================================== convenience

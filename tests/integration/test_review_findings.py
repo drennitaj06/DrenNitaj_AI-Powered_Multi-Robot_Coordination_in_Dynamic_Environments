@@ -244,7 +244,17 @@ def test_at_least_three_example_scenarios_ship() -> None:
 def test_every_example_scenario_loads_and_runs(path: Path) -> None:
     spec = load_scenario(path)
     spec.validate()
-    if spec.script is not None:
+    if spec.script is not None and not any(spec.script.actions):
+        # planning demo (Issue #3): fixture assignments, robots follow the A* reference paths
+        from robocoord.control.base import SuggestionFollower
+        from robocoord.planning import make_planner
+        from robocoord.planning.coordinator import PlanningCoordinator
+
+        coord = PlanningCoordinator(make_planner("astar"), spec.script.assignments)
+        eng = Engine(spec, coord)
+        m = eng.run(SuggestionFollower().act)
+        assert eng.terminated and m.tasks_delivered == m.tasks_released > 0
+    elif spec.script is not None:
         eng, ctrl = scripted_engine(path)
         m = eng.run(ctrl.act)
         # scripted demos are designed to finish: every task delivered, nothing unsafe

@@ -1,0 +1,26 @@
+# E1b (memory part): peak memory of RRT* with both neighbour indexes (05 §B.2, tracemalloc).
+# A subset of the E1b queries (same seed base, so the same maps and queries): 2 families ×
+# 1 map × 5 queries × 4 budgets × 2 indexes = 80 runs. Kept separate from the timed E1b runs
+# because tracemalloc slows Python several-fold; memory does not depend on CPU contention, so
+# parallel workers are used here.
+#
+#   python -m robocoord experiment --config configs/experiments/e1b_memory.toml
+
+[experiment]
+name = "e1b_memory"
+kind = "planner_queries"
+description = "Peak memory (tracemalloc) of RRT* with LogKDTreeIndex vs BruteForceIndex"
+seed_base = 31000
+timeout_s = 600.0
+workers = 8
+
+[factors]
+family = ["open", "d20"]
+size = [64]
+map = [0]
+pair = [0, 1, 2, 3, 4]
+n_max = [1000, 2000, 5000, 10000]
+index = ["kdtree", "brute"]
+
+[fixed]
+measure_memory = true
