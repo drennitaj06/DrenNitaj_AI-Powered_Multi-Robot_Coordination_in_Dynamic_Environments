@@ -39,6 +39,29 @@ class StayController:
         return {r.id: Action.STAY for r in view.robots}
 
 
+class SuggestionFollower:
+    """Plays the coordinator's suggested action ``â^plan`` (masked; ``stay`` otherwise).
+
+    The minimal plan follower used by the Issue #3 tests and experiment E2. The reference-follower
+    controller of Issue #4 (``control.reference``) supersedes it in the controller registry.
+    """
+
+    name = "follow"
+
+    def reset(self, n_robots: int) -> None:
+        return None
+
+    def act(
+        self, view: WorldView, observations: Mapping[int, Any] | None = None
+    ) -> dict[int, Action]:
+        if view.suggested is None:
+            return {r.id: Action.STAY for r in view.robots}
+        return {
+            r.id: s if view.masks[r.id][s] else Action.STAY
+            for r, s in zip(view.robots, view.suggested, strict=True)
+        }
+
+
 class ScriptedController:
     """Plays a fixed action string per robot (S/U/D/L/R, spaces ignored); then stays.
 

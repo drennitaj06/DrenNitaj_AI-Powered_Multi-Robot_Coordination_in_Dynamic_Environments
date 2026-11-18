@@ -7,7 +7,7 @@ their path monitor (Issue #3) will be composed behind this same interface.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from robocoord.core.distance import DistanceOracle
 from robocoord.core.rng import SeedStreams
@@ -45,6 +45,23 @@ class Coordinator(Protocol):
 
     def suggested_actions(self, view: WorldView) -> Sequence[Action] | None:
         """The planner's suggested action per robot (``None`` = no planner attached)."""
+        ...
+
+
+@runtime_checkable
+class PlanReporting(Protocol):
+    """Optional extension of a coordinator that plans (Issue #3): the engine records plan
+    adherence (model §9.3), adds deterministic planning fields to trace step records and the
+    planning statistics to the episode summary."""
+
+    def plan_valid(self) -> tuple[bool, ...]: ...
+
+    def trace_fields(self) -> dict[str, Any]: ...
+
+    def episode_stats(self) -> dict[str, Any]: ...
+
+    def finish(self, view: WorldView) -> None:
+        """Called once when the episode ends, with the final state."""
         ...
 
 

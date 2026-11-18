@@ -61,6 +61,8 @@ class EpisodeMetrics:
     conflicts_introduced: int | None = None
     conflicts_persisted: int | None = None
     avoidance_rate: float | None = None
+    # plan adherence (model §9.3; None when no planning coordinator is attached)
+    plan_adherence: float | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -102,6 +104,8 @@ class MetricsRecorder:
         self.avoided = 0
         self.introduced = 0
         self.persisted = 0
+        self.adherence_steps = 0
+        self.adherence_matches = 0
 
     # ------------------------------------------------------------------ legs (path efficiency)
     def leg_start(self, robot: int, optimal: int | None) -> None:
@@ -154,6 +158,19 @@ class MetricsRecorder:
             self.avoided += len(reference_events - controller_events)
             self.introduced += len(controller_events - reference_events)
             self.persisted += len(reference_events & controller_events)
+
+    def record_adherence(
+        self,
+        nonidle: Sequence[bool],
+        valid: Sequence[bool],
+        proposal: Sequence[Action],
+        suggested: Sequence[Action],
+    ) -> None:
+        """Plan adherence: non-idle robot-steps with a valid plan where ``a_i = â_i^plan``."""
+        for i, busy in enumerate(nonidle):
+            if busy and valid[i]:
+                self.adherence_steps += 1
+                self.adherence_matches += proposal[i] is suggested[i]
 
     # ------------------------------------------------------------------ summary
     def summary(self, tasks: TaskBook, t_end: int) -> EpisodeMetrics:
@@ -236,5 +253,8 @@ class MetricsRecorder:
             conflicts_introduced=self.introduced if self._cf_available else None,
             conflicts_persisted=self.persisted if self._cf_available else None,
             avoidance_rate=rate,
+            plan_adherence=(
+                self.adherence_matches / self.adherence_steps if self.adherence_steps else None
+            ),
             extra={"legs_unmeasurable": self.legs_unmeasurable},
         )
