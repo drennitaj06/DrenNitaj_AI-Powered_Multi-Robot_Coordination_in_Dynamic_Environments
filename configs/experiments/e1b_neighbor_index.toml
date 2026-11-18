@@ -1,0 +1,26 @@
+# E1b: RRT* neighbour-index comparison (05 §B.4). Decides the default index (04 §3.2).
+# 2 map families × 3 maps × 10 queries × 4 budgets × 2 indexes = 480 runs.
+# Both indexes return identical query results, so for a given query and seed the two runs build
+# the same tree; only work counters, time and memory differ.
+#
+#   python -m robocoord experiment --config configs/experiments/e1b_neighbor_index.toml
+
+[experiment]
+name = "e1b_neighbor_index"
+kind = "planner_queries"
+description = "RRT* LogKDTreeIndex vs BruteForceIndex on open and 20% density 64x64 maps"
+seed_base = 31000
+timeout_s = 600.0
+workers = 1    # sequential: wall time is the deciding quantity, so no CPU contention
+
+[factors]
+family = ["open", "d20"]
+size = [64]
+map = [0, 1, 2]
+pair = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+n_max = [1000, 2000, 5000, 10000]
+index = ["kdtree", "brute"]
+
+[fixed]
+record_trace = true      # per-iteration k, k', NN-visited, s, rebuild work (binned by n)
+# peak memory is measured separately (e1b_memory.toml): tracemalloc slows Python several-fold

@@ -1,9 +1,12 @@
 """Command-line interface: ``python -m robocoord <command>`` (architecture §5.8).
 
-Issue #2 commands:
+Commands:
 
 * ``simulate`` — run a scenario headless or as a terminal animation, print metrics, write a trace.
+  ``--planner astar|rrtstar`` (Issue #3) attaches the path planner with its monitor; robots then
+  follow the planner's suggested actions (fixture task assignments from the ``[script]`` section).
 * ``validate`` — load and validate a scenario file.
+* ``experiment`` — run an experiment specification (Issue #3: E1, E2).
 """
 
 from __future__ import annotations
@@ -16,7 +19,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from robocoord import __version__
-from robocoord.control.base import Controller, RandomController, ScriptedController, StayController
+from robocoord.control.base import (
+    Controller,
+    RandomController,
+    ScriptedController,
+    StayController,
+    SuggestionFollower,
+)
+from robocoord.core.errors import ConfigError
 from robocoord.core.rng import make_streams
 from robocoord.scenario import ScenarioError, load_scenario
 from robocoord.scenario.spec import ScenarioSpec
@@ -26,7 +36,7 @@ from robocoord.sim.metrics import EpisodeMetrics
 from robocoord.sim.text_render import enable_windows_ansi, render_frame
 from robocoord.sim.trace import TraceWriter
 
-CONTROLLERS = ("scripted", "random", "stay")
+CONTROLLERS = ("scripted", "random", "stay", "follow")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,7 +53,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--controller",
         choices=CONTROLLERS,
         default=None,
-        help="scripted (default if the scenario has a [script]), random (masked), stay",
+        help="scripted (default if the scenario has a [script]), random (masked), stay, "
+        "follow (plays the planner's suggested actions; default with --planner)",
+    )
+    sim.add_argument(
+        "--planner",
+        choices=("astar", "rrtstar"),
+        default=None,
+        help="attach a path planner (A* or RRT*) with the path monitor",
+    )
+    sim.add_argument(
+        "--rrt-iterations", type=int, default=None, help="RRT* iteration budget per call"
     )
     sim.add_argument("--max-steps", type=int, default=None, help="override scenario.max_steps")
     sim.add_argument("--delay", type=float, default=0.25, help="seconds between frames (animation)")
@@ -63,10 +83,45 @@ def build_parser() -> argparse.ArgumentParser:
 
     val = sub.add_parser("validate", help="validate a scenario file")
     val.add_argument("--scenario", required=True, type=Path)
+
+    exp = sub.add_parser("experiment", help="run an experiment specification (TOML)")
+    exp.add_argument("--config", required=True, type=Path, help="experiment TOML file")
+    exp.add_argument("--out", type=Path, default=None, help="output directory override")
+    exp.add_argument("--workers", type=int, default=None, help="parallel worker processes")
+    exp.add_argument("--limit", type=int, default=None, help="run at most N new runs (smoke)")
     return parser
 
 
-def make_controller(name: str, spec: ScenarioSpec, seed: int) -> tuple[Controller, Coordinator]:
+def make_controller(
+    name: str,
+    spec: ScenarioSpec,
+    seed: int,
+    planner: str | None = None,
+    rrt_iterations: int | None = None,
+) -> tuple[Controller, Coordinator]:
+    if planner is not None:
+        from robocoord.planning import make_planner
+        from robocoord.planning.coordinator import PlanningCoordinator
+
+        if spec.script is None:
+            raise ScenarioError(
+                "script", "--planner needs fixture task assignments ([script].assignments)"
+            )
+        options = (
+            {}
+            if rrt_iterations is None or planner != "rrtstar"
+            else {"max_iterations": rrt_iterations}
+        )
+        coord = PlanningCoordinator(make_planner(planner, **options), spec.script.assignments)
+        if name == "follow":
+            return SuggestionFollower(), coord
+        if name == "random":
+            return RandomController(make_streams(seed).generator("policy")), coord
+        if name == "stay":
+            return StayController(), coord
+        return ScriptedController(spec.script.actions), coord
+    if name == "follow":
+        raise ScenarioError("controller", "the follow controller needs --planner")
     if name == "scripted":
         if spec.script is None:
             raise ScenarioError("script", "the scripted controller needs a [script] section")
@@ -117,10 +172,25 @@ def format_metrics(m: EpisodeMetrics) -> str:
     return "\n".join(lines)
 
 
+def format_planning(p: dict[str, object], adherence: float | None) -> str:
+    adh = "n/a" if adherence is None else f"{adherence:.2f}"
+    return (
+        f"planning ({p['planner']}): {p['calls']} planner calls | "
+        f"by trigger {p['calls_by_trigger']}\n"
+        f"  status mix {p['status_mix']} | plan adherence {adh} | "
+        f"legs completed {p['legs_completed']} | releases {p['releases']}"
+    )
+
+
 def cmd_simulate(args: argparse.Namespace) -> int:
     spec = load_scenario(args.scenario, seed=args.seed)
-    controller_name = args.controller or ("scripted" if spec.script is not None else "random")
-    controller, coordinator = make_controller(controller_name, spec, spec.seed)
+    if args.planner is not None:
+        controller_name = args.controller or "follow"
+    else:
+        controller_name = args.controller or ("scripted" if spec.script is not None else "random")
+    controller, coordinator = make_controller(
+        controller_name, spec, spec.seed, args.planner, args.rrt_iterations
+    )
     trace = TraceWriter(args.trace) if args.trace else None
     ansi_ok = enable_windows_ansi()
     color = args.color and ansi_ok
@@ -161,6 +231,9 @@ def cmd_simulate(args: argparse.Namespace) -> int:
             f"\nfinished: {status} (controller: {controller_name}, coordinator: {coordinator.name})"
         )
         print(format_metrics(metrics))
+        planning = metrics.extra.get("planning")
+        if planning:
+            print(format_planning(planning, metrics.plan_adherence))
         if isinstance(coordinator, NullCoordinator) and metrics.tasks_released:
             print(
                 "note: no task coordinator is attached to this run, so tasks are never assigned "
@@ -196,9 +269,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "simulate":
             return cmd_simulate(args)
+        if args.command == "experiment":
+            from robocoord.experiments.runner import run_experiment_cli
+
+            return run_experiment_cli(args.config, args.out, args.workers, args.limit)
         return cmd_validate(args)
     except ScenarioError as exc:
         print(f"scenario error: {exc}", file=sys.stderr)
+        return 2
+    except ConfigError as exc:
+        print(f"configuration error: {exc}", file=sys.stderr)
         return 2
 
 

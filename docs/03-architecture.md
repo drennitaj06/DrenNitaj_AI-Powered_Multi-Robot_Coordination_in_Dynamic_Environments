@@ -343,6 +343,15 @@ class NeighborIndex(Protocol):            # RRT* only
 class PathMonitor: ...                    # triggers T1–T6, rejoin, stall block list
 ```
 
+**As implemented in Issue #3** (names refined, responsibilities unchanged):
+- `planning/base.py`: `PlanConstraints(static, dynamic_blocked, proximity, lambda_prox)` (cached flat views `free_flat`, `penalised_flat`), `PlanQuery`, `PlanResult(path, cost, status, degraded, stats, waypoints)`, and `PlanStats` (the work counters of `04` §2.3 and §3.6, with optional per-iteration traces). The `Planner` protocol adds `decides_reachability`, so the procedure knows when to run the BFS guard.
+- `planning/constraints.py`: `build_constraints(grid, start, goal, obstacles, params, extra_blocked)` and `ConstraintParams(sensing_radius=3, inflation_radius=1, lambda_prox=2.0)`.
+- `planning/procedure.py`: `plan_with_procedure(planner, query, static_reachable=None)`.
+- `planning/astar.py`, `planning/rrtstar.py` (`RRTStarConfig`), `planning/geometry.py`, `planning/neighbors.py` (`NeighborIndex` protocol with `insert(x, y)`, `nearest(x, y)`, `radius(x, y, r)`, `BruteForceIndex`, `make_index`), `planning/kdtree.py` (`StaticKDTree`, `LogKDTreeIndex`).
+- `planning/monitor.py`: `PathMonitor`, `MonitorParams(validity_horizon=5, rejoin_window=3, cooldown=3, stall_threshold=4)`, `PlanCall`.
+- `planning/coordinator.py`: `PlanningCoordinator(planner, assignments)`. It combines fixture assignments (until the Issue #4 allocator), the path monitor and the release/hold policy.
+- `sim/coordinator.py` gains the optional `PlanReporting` protocol (`plan_valid`, `trace_fields`, `episode_stats`, `finish`). The engine uses it for plan adherence, the `"plans"` trace field and `EpisodeMetrics.extra["planning"]`. This is additive; earlier coordinators are unchanged.
+
 ### 5.5 `allocation` (Issue #4)
 
 ```python
@@ -376,9 +385,13 @@ class Shield: def apply(self, view, proposal) -> tuple[dict[int, Action], list[S
 - `stats`: bootstrap CIs, paired bootstrap of differences, Wilcoxon, Holm, effect sizes.
 - `plots`.
 
+*Issue #3 implementation:* `experiments/spec.py` (TOML `ExperimentSpec`, Cartesian factors, labelled `[[planners]]`), `runner.py` (resumable, process pool, per-run cap recorded as `timeout`, exceptions recorded as `error`, `env.json`), `records.py` (append-only `records.jsonl`), `stats.py` (bootstrap CI, paired bootstrap, Holm, rank-biserial, log–log exponent fits; the Wilcoxon p-value arrives with SciPy in Issue #4), `planning_runs.py` (E1/E2 executors) and `analysis.py` (Markdown summaries). CLI: `python -m robocoord experiment --config configs/experiments/<name>.toml`. Plots are deferred to Issue #8.
+
 ### 5.8 `viz` and `cli` (Issue #8; CLI grows from Issue #2)
 
 - `python -m robocoord simulate --scenario ... --planner astar|rrtstar --allocator auction|sequential --controller baseline|reference|madql|ppo [--checkpoint ...] [--shield off|predictive] [--trace out.jsonl] [--headless]`
+
+  *Implemented so far (Issue #3):* `simulate --planner astar|rrtstar [--rrt-iterations N] [--controller follow|scripted|random|stay]`. Goals come from the scenario's `[script].assignments` fixture until the allocator exists (Issue #4).
 - `python -m robocoord train --config ... --seed 1`
 - `python -m robocoord experiment --config ...`
 - `python -m robocoord data prepare <dataset>`
@@ -513,6 +526,7 @@ Scenarios are TOML files loaded by `robocoord.scenario.load_scenario` and valida
 | `corridor_queue.toml` | the safety layer: vertex conflicts, cascade "blocked moves", a map event deferred until the convoy has passed (hand-computed metrics in `tests/integration/test_review_findings.py`) | default (`scripted`) |
 | `random_warehouse.toml` | generated warehouse, random placement, Bernoulli arrivals; no allocator yet, so 0 deliveries is expected | `--controller random` |
 | `rooms_dynamic.toml` | generated rooms map, random placement, Poisson arrivals, map events | `--controller random` |
+| `planning_detour.toml` | Issue #3: robots follow A\* or RRT\* reference paths; a corridor closure (T2 detour), a crossing obstacle (T2), a temporarily blocked drop-off (`unreachable`, hold, T5 retries) | `--planner astar` or `--planner rrtstar` |
 
 
 | Section | Keys | Notes |
