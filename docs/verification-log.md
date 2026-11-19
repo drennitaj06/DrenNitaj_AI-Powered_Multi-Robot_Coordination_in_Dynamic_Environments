@@ -277,3 +277,231 @@ Central, chronological record of **executed** verification: automated test runs,
   - Line coverage 95 % total: planning 98.2 %, core 96.4 %, sim 96.2 %, experiments 96.1 %.
 - **Data integrity:** MD5 of all six pre-existing `records.jsonl` files (e1a, e1b_memory, e1b, e1b_r2, e1c, e2) verified unchanged after all work. New data: `results/experiments/e1a_planners_static_r3/` and `results/experiments/e2_replanning_r2/`. Derived `summary.md` files were regenerated for `e2_replanning` (new conflict columns), `e1b_neighbor_index_r2` (polylog table) and the two new directories.
 - **Left open:** primary-source verification of the de Berg / Lee & Wong statement and of the FBF content (sources not accessible from this environment; stated as unverified above).
+
+### V-7 — Issue #4: environment and stage 1, benefit construction (2026-11-18)
+- **Branch:** `feature/task-allocation` at `b8e5fb1`, equal to `develop` and `origin/develop` (Issue #3 merged); verified from `.git` metadata only, no Git commands.
+- **Environment changes (approved by the student):**
+  - *Hypothesis pinned to 6.155.7* in `pyproject.toml` (`dev` extra, exact pin) and `requirements-lock.txt`.
+    - **Why:** 6.170.15 is a compiled build (maturin wheel `cp314-win_amd64`) whose `hypothesis._native` module is blocked by Windows Application Control on the development machine. It imports `_native` with no pure-Python fallback, so `pytest` could not even load `conftest.py`.
+    - **How the version was found:** a binary search over PyPI metadata shows 6.155.7 is the newest release with a pure-Python wheel (`hypothesis-6.155.7-py3-none-any.whl`). Every release from 6.156.1 on is compiled per platform, and 6.156.0 is not in the index.
+    - **Compatibility:** `requires_python >= 3.10`, 3.14 classifier; only runtime dependency `sortedcontainers` (already pinned).
+    - **Verified locally:** in a scratchpad install and then in `.venv`, complete suite 232 passed. `--hypothesis-show-statistics`: all 22 property tests ran 4 185 passing examples, 0 failing. No property test was disabled and no security exception was requested.
+  - *SciPy 1.18.1* added to the `dev` extra and the lock file, as a **test and experiment oracle only** (`scipy.optimize.linear_sum_assignment`, `scipy.stats`); never the allocator.
+    - Installed into `.venv` only (37.4 MB wheel). NumPy stayed at 2.4.6.
+    - It loads despite Application Control. `linear_sum_assignment(maximize=True)` matched brute force on 300 random instances.
+    - PyPI provides cp312, cp313 and cp314 wheels for manylinux x86_64 and win_amd64, which covers the CI matrix.
+  - *CI resolution:* `pip install -e ".[dev]" --dry-run --report` (what CI runs) resolves Hypothesis 6.155.7 and SciPy 1.18.1, the same as the lock file. **Not yet verified:** an actual CI run with the new pins.
+  - *Pre-existing difference, documented rather than changed:* CI resolves NumPy 2.5.5 (`numpy>=2.0`), while the lock file pins 2.4.6 (Issue #2 Application Control pin). Explained in `03-architecture.md` §3.3 and in the lock-file header; recorded experiments use the lock file and store their NumPy version in `env.json`.
+- **Stage 1 — benefits** (`src/robocoord/allocation/{__init__,benefits}.py`, `tests/unit/allocation/{__init__,test_benefits}.py`): implementation notes in `04` §4.1. The only deviation from the model is the formulation of $M$ on scaled integer components, a robustness refinement that is exact for every $\kappa$ and $k$, documented there. Tests: hand-computed instance; infeasible pairs and padding; 300 brute-force instances for maximum cardinality, optimality among maximum-cardinality matchings and padding equivalence; 300 instances for the rounding bound; 60 large instances ($k \le 120$, including $\kappa = 0$ and $h = 0$) for the offset margin; validation and overflow guard.
+- **Gates (actual output):** `ruff check .` passed; `ruff format --check .` 93 files formatted; `mypy` no issues in 49 source files. Fast suite **236 passed, 3 deselected**; e2e **3 passed**; complete suite **239 passed**. Coverage: `allocation/benefits.py` 99 %, total 95 %.
+- **Stage 2 — auction** (`src/robocoord/allocation/{base,auction}.py`, `tests/unit/allocation/test_auction.py`): implementation notes in `04` §4.1.
+  - Exact int64 auction. ε-scaling uses a $(k+1)$ benefit scale, so integer ε = 1 is $\varepsilon = 1/(k+1) < 1/k$ (exact optimum). Fixed ε gives $V \ge \mathrm{OPT} - k\varepsilon$ and at most $k(\lfloor C/\varepsilon\rfloor + 1) + 1$ bids, derived in `04`.
+  - Tests against SciPy's Hungarian solver: 200 square matrices ($k \le 60$) for exact optimality, final ε < 1/k and ε-CS; 200 rectangular benefit problems for integer optimality, maximum cardinality and the $q/s$ real-value bound; 200 matrices × 5 values of ε for the additive and bid bounds; a non-vacuous suboptimal fixed-ε case; edge cases, determinism, validation, caps.
+  - **Defect found by the tests and fixed:** the time and bid caps were checked every 256 bids *per phase*, so an ε-scaling solve with short phases never checked them. Now counted cumulatively and also checked at each phase boundary.
+  - **Finding:** two integer-optimal matchings can differ in original units by up to $q/s$ (observed 92.0 vs 92.1). Tests compare integer totals exactly and real values within that bound.
+  - **Gates (actual output):** `ruff check .` passed; `ruff format --check .` 96 files formatted; `mypy` no issues in 51 source files. Fast suite **243 passed, 3 deselected**; e2e **3 passed**. Coverage: `allocation/auction.py` 99 % (only the `k = 0` return of `epsilon_cs_violation` is not covered), `allocation` 99 %, total 95 %.
+  - **Not yet verified:** a CI run with the new pins (needs a push by the student).
+- **Stage 3 — sequential auction** (`src/robocoord/allocation/sequential.py`, `tests/unit/allocation/test_sequential.py`): implementation notes in `04` §4.2.
+  - Greedy rule on the padded integer matrix, implemented as one sort on $(-A_{ij}, i, j)$. Tie rule documented: lowest task index within a bid, lowest robot index among equal bids.
+  - **Oracles:** a literal round-by-round simulation written from the `04` §4.2 rule; SciPy's Hungarian solver; full enumeration. A scratchpad mutation check confirmed the literal oracle detects a flipped tie rule (99/200 and 102/200 instances differ).
+  - **Results:** same pairs as the literal rule on 200 matrices; $2V \ge \mathrm{OPT}$ on 200 matrices and 200 benefit problems; maximality; optimal on additive and single-robot instances; constructed counter-examples (tight ½ ratio; 3 vs 4; corridor cost 9 vs 7).
+  - **Findings:**
+    - The ½ guarantee is for the integer objective including the offset. In original units it does not hold: on the κ = 4 corridor, greedy −1 vs optimum +1.
+    - On benefit problems the offset gives a derived integer ratio $V/\mathrm{OPT} \ge (k-1)/(k+1)$, also tested on the 200 benefit problems. It mostly measures $M$, so E3 will report the gap in original units.
+    - On benefit problems with grid distances greedy always reaches maximum cardinality (component-complete feasibility; proof in `04` §4.2). This refines the §4.2 sentence that greedy reaches maximum cardinality "only if greedy happens to", which remains true for general matrices.
+  - **Gates (actual output):** `ruff check .` passed; `ruff format --check .` 98 files formatted; `mypy` no issues in 52 source files. Fast suite **251 passed, 3 deselected**; e2e **3 passed**. Coverage: `allocation/sequential.py` 100 %, total 95 %.
+  - **Not in this stage:** allocation triggers and policy (stage 4), so the second approved commit message ("…and allocation triggers") should wait until stage 4.
+- **Stage 4 — allocation policy and coordinator** (`src/robocoord/allocation/policy.py`, `src/robocoord/planning/coordinator.py`, `tests/unit/allocation/{test_priority,test_policy}.py`, `tests/integration/test_allocation_integration.py`): implementation notes in `04` §4.3–4.4. `03` §5.5 updated.
+  - **Policy:** triggers released, delivered, idle, unreachable (carried to the next step), map_event and retry; at most one auction per step; eligibility per model §8; application unassigns before it assigns; pre-emption only through the auction; a new goal leads to T1 in the same step.
+  - **Refactor:** the fixture `PlanningCoordinator` keeps its interface and behaviour (shared base class). The existing planning, integration and e2e tests pass unchanged (107 + 3 before the new tests were added).
+  - **Refinement — keep-current tie-break (`prefer_current`):** model §8 requires that a robot keep its task at a gain of exactly $h$. A scratchpad check showed both allocators switching at gain $= h$ whenever the other task was listed first. The exact lexicographic matrix $(k+1)A + E$ fixes this (proof in the code) without changing the optimum of $A$. The hysteresis test now runs both task orders.
+  - **Documentation requested by the student:** `04` §4.2 now states that the $(k-1)/(k+1)$ ratio holds for the offset-inclusive integer objective, not the original unshifted benefits, with its proof and assumptions (i)–(iv). It also states the connected-component assumption (CC), why it holds for `build_problem` with `DistanceOracle`, and when it would fail.
+  - **Finding (aging):** in a constructed single-robot stream, aging moved the low task's pickup from $t = 126$ to $t = 18$ when no backlog forms. With a backlog of level-3 tasks, the low task won an auction at $t = 42$ but was pre-empted twice by aged higher-level tasks and picked at $t = 135$, the same as without aging. This is model §4 P3 / "Not claimed (i)" observed in simulation. Both are kept as tests; neither is a guarantee.
+  - **Observation:** with the allocation coordinator, the `map_event` auction normally removes infeasible pairs before the monitor runs (`releases = 0` in the map-event test). The `unreachable` release path is reached only when that solve is capped. A test with an allocator capped at the map-event step covers it: one release, then an auction triggered by `unreachable` and `retry`.
+  - **Gates (actual output):** `ruff check .` passed; `ruff format --check .` 102 files formatted; `mypy` no issues in 53 source files. Fast suite **309 passed, 3 deselected**; e2e **3 passed**. Coverage: `allocation/policy.py` 100 %, `allocation/sequential.py` 100 %, `planning/coordinator.py` 97 % (uncovered: the two abstract hooks, the default no-op `_on_release` of the base class, and the fixture's length check), total 95 %.
+  - **Not yet verified:** a CI run with the new pins (needs a push by the student); the CLI `--allocator` option (stage 6).
+- **Stage 5A — baseline right-of-way controller** (`src/robocoord/control/baseline.py`; `planning/constraints.py` type-only change; `tests/unit/control/{__init__,test_baseline}.py`; `tests/integration/test_baseline_integration.py`): implementation notes in `04` §5.3, `03` §5.6 updated. No deadlock detour, reference follower, shield or X-10.
+  - **Rule:** the `04` §5.3 pseudocode. Right-of-way goes to the largest (aged task weight π̃, −id) among the robots claiming a cell; idle robots are lowest. $\hat Z_i$ comes from the shared `sense`. Decision reasons are recorded per robot and step.
+  - **Collision property (proof in `04`):** with every robot on the baseline, no RR, RO-swap or invalid move is proposed; with constant-velocity obstacles and $r_s \ge 2$, no conflict at all. Property-tested against the simulator's own `detect_conflicts` and `resolve_obstacle_moves` (400 + 400 examples), with a non-vacuity check.
+  - **Measured on the 5 demo scenarios × {A\*, RRT\*} × {auction, sequential} (20 runs, exploration script in the scratchpad, then asserted in the integration tests):**
+
+    | | baseline | plain follower |
+    |---|---|---|
+    | RR conflicts (vertex + swap), total over 20 runs | **0** | 0 – 126 per run (17 of 20 runs > 0) |
+    | RO vertex conflicts | 1–2 in 4 runs | 1–4 in 4 runs |
+    | Runs where it delivered more / fewer tasks than the other | more in 8, fewer in 4, equal in 8 | |
+
+    - Examples: `demo_delivery` 4/4 with 0 conflicts (follower 1/4, 80–121 RR conflicts); `random_warehouse` A\* 10/10 (follower 7/10, 48 RRv).
+    - Fewer for the baseline:
+      - `corridor_queue` with the sequential allocator, both planners (1/3 vs 3/3): conservative following lets a timed wall split the convoy.
+      - `planning_detour` A\*/auction (1/2 vs 2/2): waiting plus repeated T2 detours around a shuttling obstacle; the follower relied on 12 conflicts cancelled by the arbiter.
+      - `rooms_dynamic` RRT\*/auction (5/9 vs 6/9).
+  - **Finding (head-on, for stage 5B):** two robots carrying tasks to opposite ends of a corridor never pass, in a single lane *and* in two lanes. T4 fires for both robots at the same step, and the symmetric replans make them meet again. The expected test in `04` §5.3, "head-on corridor case resolved via T4", is **not met**. T4 resolved an asymmetric encounter in `planning_detour` (only one robot's T4 fired). Recorded in a test and listed as limitation 1; not changed in this stage.
+  - **Interpretation recorded:** π̃ uses the age $t - \rho_j$ also after pickup (the engine's `Task.age`), with the allocation's α.
+  - **Gates (actual output):** `ruff check .` passed; `ruff format --check .` 106 files formatted; `mypy` no issues in 54 source files. Fast suite **361 passed, 3 deselected**; e2e **3 passed**. Coverage: `control/baseline.py` 100 %, `allocation/policy.py` 100 %, total 95 %.
+  - **Not yet verified:** a CI run with the new pins; the controller statistics in `EpisodeMetrics` and the CLI (stage 6).
+
+### V-8 — Issue #4: full-scope completion (stages 5B, 6, 7, 8) (2026-11-18)
+- **Authorization:** the student's final authorization restored the full `07` scope (reference follower, shield, X-10), approved the stage 5B deadlock-detour design, and required E3, the preliminary E5 and NFR-PERF-1. No Git operation was run by the assistant.
+- **Regression method:** before any stage 5B change, SHA-256 hashes of complete traces were taken for 46 configurations: 5 demo scenarios × planners × {fixture, auction, sequential} × {follow, baseline}.
+  - After stage 5B: **0 of 46 differ** (resolver off).
+  - After stage 6: 0 of 46 differ once the new per-step `suggested` field (X-10) is removed. It is the only trace change for existing configurations.
+  - The final run confirms the same.
+- **Stage 5B — deadlock detour** (`planning/deadlock.py`; `planning/monitor.py` T7 and optional `RobotInput` fields; `planning/coordinator.py` hooks; `allocation/benefits.robot_priorities`): design and proof in `04` §5.5.
+  - Safety proof re-checked against the stage 5A code: it holds for arbitrary suggestions, and the resolver changes only goals.
+  - **Three design corrections found during implementation**, each with documented consequences: release horizon instead of the whole-path test; the attempt bound counts starts; static vs dynamic `no_passing_place`. Plus the exclusion of detour plans from the task-release policy, and T7 listed only when the resolver is enabled (trace stability).
+  - **Bug found by self-review and fixed before testing:** cycles still persisting after an abort or a map change were never handled again (detection used `count == detect_steps`).
+  - Results:
+    - two-lane head-on resolved for both planners × both allocators × {unequal, equal} priority;
+    - single lane reported `no_passing_place`;
+    - a 4-robot rotation resolved for 3 priority patterns;
+    - a map event on the passing cell gives an abort, then resolution;
+    - an obstacle delays a detour, which still completes;
+    - 0 RR / ROs / INV with the resolver on in 20 demo configurations.
+  - Demo deliveries: 89 with the resolver vs 89 without (gains and losses listed in `04` §5.5).
+  - One Issue #3 test assertion updated: the trigger table now has T7; the base triggers are unchanged.
+- **Stage 6 — reference follower, shield, X-10** (`control/reference.py`, `control/shield.py`, `sim/engine.py` step 5 and `SafetyLayer`, `sim/metrics.py` shield counters, trace fields `suggested` / `shield` / `arb_actions`):
+  - The reference follower is action-identical to `SuggestionFollower` (300 random worlds).
+  - X-10 identities hold in 40 configurations (5 scenarios × 2 planners × 2 allocators × shield on/off).
+  - The shield only replaces moves by `stay` and is never at fault (400 worlds). It removes RO conflicts under constant velocity (400 worlds); a counter-example exists with turning obstacles.
+  - The shield never intervenes for the baseline (20 configurations).
+  - Each X-10 category is demonstrated on a constructed episode.
+- **Stage 7 — CLI and demos** (`cli.py`; `configs/scenarios/{headon_two_lane,headon_single_lane,preemption,shield_corridor}.toml`):
+  - 144 runs (9 scenarios × 16 combinations) exit 0 with 0 physical collisions.
+  - The baseline delivers every task in `demo_delivery`, `random_warehouse`, `headon_two_lane` and `preemption` in all 8 of its combinations.
+  - **A wrong demo claim was corrected:** the pre-empted task in `preemption` is re-auctioned to robot 1 at t = 6, not to robot 0.
+  - `shield_corridor` delivers nothing for any controller (the obstacle pins itself in the single lane). It is documented as a shield demo only.
+- **Stage 8 — experiments** (`experiments/{allocation_runs,allocation_analysis,perf}.py`, `configs/experiments/{e3a_assignment,e3b_priority,e5_prelim}.toml`):
+  - E3a: 1 120 solves.
+  - E3b: 120 episodes. λ = 0.16 was chosen on validation seeds 10000–10004 before the test run.
+  - Preliminary E5: 600 baseline episodes.
+  - NFR-PERF-1: median 0.56 ms, p99 18.6 ms, max 36.3 ms (target missed at the maximum; cause BFS-cache rebuilds after map events).
+  - Results in `05` §B.6.
+  - **Overstatements caught while writing them up and corrected:**
+    - the E3b verdict column first used the CI alone (now CI and Holm);
+    - the first NFR-PERF-1 harness included idle tail steps (now natural episodes plus a busy-step statistic);
+    - "3–10× slower at every k" was replaced by the measured 7–11× at k = 400 and up to ≈ 70× at k ≤ 20.
+- **X-6 (task part)** was added as a hand-computed multi-level test: $F_w$ = 8.4, flow times 6 / 18, waits 5 / 17.
+- **Final gates (actual output):**
+  - `ruff check .` passed; `ruff format --check .` 119 files formatted; `mypy src/robocoord` no issues in 60 source files.
+  - Fast suite **550 passed, 35 deselected**; long suite (`-m "slow or e2e"`) **35 passed**; experiment smoke tests 12 passed.
+  - Coverage total **95 %**: `planning/deadlock.py` 96 %, `control/{baseline,reference,shield}.py` 100 %, `allocation/*` 99–100 %, `sim/engine.py` 98 %, `cli.py` 94 %.
+- **Not verified here:** a CI run (needs a push by the student; it would also confirm the Hypothesis/SciPy pins); behaviour on hardware other than the one machine recorded in `env.json`.
+
+### V-9 — Project Issue #4 (GitHub issue #8): audit corrections, complete preliminary E5, performance evidence (2026-11-18)
+- **Numbering:** Project Issue #4 = GitHub issue #8. The plan's own Issue #8 is the final evaluation, where the final E5 belongs.
+- **Trigger:** the student's audit (investigation only; no files changed) found:
+  - NFR-PERF-1 reported without the per-step exceedance structure, and without raw samples;
+  - E5 incompleteness explained only for the static dynamics, with "no unresolved deadlock" true only for robot–robot cycles;
+  - the reference-follower half of the *non-learned* preliminary E5 missing, although GitHub issue #8 asks for "preliminary non-learned E5 numbers";
+  - detour assumptions R7–R9 and the detection scope undocumented;
+  - the numbering ambiguity.
+
+  The student accepted the findings and authorised the corrections.
+- **Overwrite protection:** SHA-256 of all 68 files under `results/` was recorded before any change and compared at the end (result below).
+- **Code changes (evidence tooling only; no algorithm, resolver or model change):**
+  - `experiments/allocation_runs.py`: `system_episode_setup()` is shared by the executor and the replays. A new `fixed.controller` option defaults to `baseline`, so the existing `e5_prelim` configuration behaves identically. `reference` runs the reference follower with its documented defaults (resolver off, shield off).
+  - New `configs/experiments/e5_prelim_reference.toml`: identical factors, seeds, scenario parameters, metrics and caps to `e5_prelim.toml`; only the controller differs. Separate output directory.
+  - New `experiments/e5_diagnostics.py`: deterministic replay of every incomplete episode, checked against its record, plus a rule-ordered cause classification. It writes `undelivered.json` / `undelivered.md` as new files.
+  - `experiments/allocation_analysis.py`: the E5 summary adds pooled completion and incomplete-episode counts and names the controller. New `compare_e5_controllers` writes a paired baseline-vs-reference report; each controller is shown separately, and differences are paired per instance.
+  - `experiments/perf.py`: raw per-step samples (`nfr_perf1_samples.csv`) and first-step / map-event / steady-state statistics. The workload and timing are unchanged; the new reads happen outside the timed region. It refuses to overwrite an existing result without `--overwrite`.
+  - `experiments/analysis.py`: registers `e5_prelim_reference`.
+  - New `tests/integration/test_e5_evidence.py` (20 tests, 11 of them the parametrised cause-name documentation check): executor pairing; each diagnostic cause on a hand-derived episode (including the contested free cell); replays reproduce the records; comparison output; the diagnostics CLI; perf samples and the overwrite guard.
+- **Runs:**
+  - `e5_prelim_reference`: 600 `done`, 0 timeouts.
+  - Diagnostics of the baseline half: 83 incomplete episodes, **0 replay mismatches**. 91 undelivered tasks = 61 obstacle on the goal (54 patrol, 7 random-walk), 28 idle robot on the goal, 1 no plan, 1 horizon. This equals the audit's independent classification exactly.
+  - Diagnostics of the reference half: 404 incomplete episodes, **0 replay mismatches**. 1 357 undelivered tasks = 1 138 contested free next cell, 65 horizon, 60 obstacle on the goal (49 patrol, 11 random-walk), 59 busy robot on the route, 19 idle robot on the goal, 11 unassigned but available, 3 idle robot on the route, 2 no plan, **0 other**.
+  - Rule refinement found while running: the first reference diagnostics left 1 138 tasks as `other`. A replay of a sample showed that in every case the holder's next cell was free but was also another robot's next cell. The plain follower proposes that cell every step and the arbiter freezes all the claimants; T4 does not fire because the cell is not occupied. A `route_contested_cell` rule was added (rule 9) together with a hand-derived junction test (the baseline delivers both tasks there). Both halves were then re-diagnosed; the baseline counts were unchanged.
+  - Paired comparison: `results/experiments/e5_prelim_comparison.md`.
+  - NFR-PERF-1 re-run into `results/perf_r2/`; the original `results/perf/` is kept.
+- **Documentation corrected:** `05` (E5 and NFR-PERF-1 sections, register, numbering), `04` (§5.3 limitations 3 and 6; §5.5 R1–R9, detection scope, unresolvable cases, rotation-test scope), `02` (G20, G22), `07` (scope table, numbering).
+- **Docs checked against the raw evidence** (every E5 number recomputed from both `records.jsonl` files; every NFR-PERF-1 r2 number from `nfr_perf1_samples.csv`). Pooled counts, incomplete episodes, conflict ranges, paired-difference ranges, cause counts and the deadlock counters (`unresolved_at_end` = 0 in all 600 baseline episodes) all matched. Two corrections were made:
+  - mean-of-episodes column: baseline RRT\*/sequential/full was 0.9874, recomputed 0.9867; reference RRT\*/sequential/full was 0.894, recomputed 0.8949. The column is now 4 decimals, rounded half-up throughout;
+  - map-event exceedances: the doc said "11–16 %"; the three runs give 11, 13 and 19 of 116 (9–16 %).
+- **Overwrite check** (SHA-256, 68 files before, 80 after; repeated after the test suites): changed only `results/experiments/e5_prelim/summary.md`, regenerated on purpose in the new format from unchanged records. Missing: none. New: `e5_prelim/undelivered.{json,md}`, `e5_prelim_reference/*` (6 files), `e5_prelim_comparison.md`, `perf_r2/*` (3 files). `results/perf/`, `e3a/` and `e3b/` and all record files are byte-identical.
+- **Final gates (actual output):**
+  - `ruff check .` passed; `ruff format --check .` 121 files formatted; `mypy src/robocoord` no issues in 61 source files.
+  - Fast suite **570 passed, 35 deselected** (550 + 20 new); long suite (`-m "slow or e2e"`) **35 passed**.
+  - Coverage total **95 %**; `e5_diagnostics.py` 91 %, `perf.py` 92 %, `allocation_runs.py` 95 %, `allocation_analysis.py` 87 %.
+- **Not verified here:** a CI run (needs a push by the student); other hardware; the timing numbers are from one machine and vary between runs (21–29 exceedances).
+
+### V-10 — Project Issue #4 (GitHub issue #8): endpoint recovery and NFR-PERF-1 optimisation (2026-11-19)
+- **Trigger:** the student's focused review after V-9:
+  - 89 of 91 undelivered baseline E5 tasks were permanent goal blockages, against the model's "transient" wording;
+  - NFR-PERF-1 was not met as a per-step bound.
+
+  An investigation (no code changed) found:
+  - *Robot–obstacle mutual waits* (61 tasks; every patrol case had another free exit, but its deterministic next step was the robot's cell; 7 random walks on dead-end goals).
+  - *Idle robots left on endpoints* (28 tasks; 24 had delivered there).
+  - *BFS-field construction dominating* first and map-event steps.
+  - *Verdict:* the planner matched the model; the cause was a specification gap (model §5.2's "transient" was an unstated assumption that A-5 falsifies) plus missing parking.
+
+  The student approved robot-side recovery (A-5 unchanged), on-demand parking, default-on for both controllers with `--endpoint off`, workloads R/F, and optimisations O1/O2 first (O3 only if needed).
+- **Parameters fixed before any run** (`EndpointParams`): W = 4 = T_stall, H = 8, M = 3, radius 8, abort 4. Not tuned. Development smoke runs used seeds 10000–10019 only.
+- **Code:**
+  - New `planning/endpoint.py` (parking: nearest safe cell, K1–K4 with a cut-vertex rule; retreat: blockage episodes, W/H/M, outcomes; counters; end-of-episode report).
+  - `planning/coordinator.py` composes it after the resolver.
+  - `planning/monitor.py`: T8; `RobotInput.trigger` / `count_active`.
+  - `planning/deadlock.py`: `Override` carries both.
+  - `core/distance.py`: O1 flat BFS with per-version neighbour lists; O2 component reachability; symmetric field reuse; the legacy implementation selectable for tests and the paired benchmark.
+  - `allocation/benefits.py`: the leg D(p, d) is read from the pickup's field.
+  - `cli.py`: `--endpoint on|off`; recovery statistics line.
+  - `experiments/`: `fixed.endpoint` (absent = off, so stored records replay), recovery-aware diagnostics, `compare-recovery`, workloads R/F with paired legacy/fast runs, p90, exceedance counts, a per-step state digest and the power state.
+- **Found and fixed during the work:**
+  1. The episode can end on the delivery step, so `goal_reached_after_recovery` is also counted in `finish()` (integration test).
+  2. The deviation rate is defined per non-idle robot-step, so parking steps and their T3 calls are excluded (`count_active`; unit test).
+  3. A robot held by the resolver had its parking restarted and cancelled every step, which double-counted events. Recovery is now not started for robots the resolver overrides (unit test).
+  4. Workload F first used RRT\*'s library default budget; set to the E5 n_max = 1 000.
+
+  Runs made before fixes 2–3 were moved out of `results/` to the scratchpad (not used), and every reported run uses the final code.
+- **Tests:**
+  - New: `test_endpoint.py` (21), `test_endpoint_integration.py` (31), `test_endpoint_evidence.py` (7, 1 slow), `test_distance_equivalence.py` (5), and 17 in `test_cli_matrix.py`.
+  - Changed: one assertion in `test_monitor.py` now names the full trigger set including T8 (still an equality). No test was deleted, skipped or weakened, and Hypothesis settings were not reduced.
+- **E5 with recovery** (`e5_recovery*.toml`, the same 1 200 paired instances; `05` §B.6):
+  - *Baseline:* 91 → 8 undelivered, 83 → 8 incomplete episodes; 75 episodes fixed, 0 regressions. The remaining 8 are 6 never-leaving patrols (all `attempts_exhausted`, reported unresolved), 1 horizon and 1 no-plan.
+  - *Reference:* 1 357 → 1 286; 23 fixed, 3 regressions (all free-cell contests).
+  - 0 physical collisions; baseline RR/ROs/INV 0; diagnostics replays 0 mismatches (8 + 384).
+- **NFR-PERF-1** (original implementation benchmark, `results/perf_r4/`, on AC, legacy and fast interleaved per seed, identical state digests in 12/12 configurations):
+  - *Workload R:* max 33.7–35.6 ms → **7.0–9.5 ms**, 40 → 0 steps ≥ 20 ms.
+  - *Workload F, A\*:* max ≤ 15.43 ms, 0 exceedances.
+  - *Workload F, RRT\*:* still 23–34 % of steps ≥ 20 ms.
+  - The intermediate battery run (`perf_r3_R/`, O1/O2 only) had 3/40 first steps ≥ 20 ms (max 24.83 ms).
+  - O3 was not needed and not implemented.
+- **Overwrite check** (SHA-256 against the 68-file snapshot taken before V-9): changed only `e5_prelim/summary.md` (the intentional V-9 regeneration). Missing: none. New: the V-9 files plus `e5_recovery/*`, `e5_recovery_reference/*`, three comparison files, `perf_r3_R/*` and `perf_r4/*`.
+- **Final gates (actual output):**
+  - `ruff check .` passed; `ruff format --check .` 126 files formatted; `mypy src/robocoord` no issues in 62 source files.
+  - Fast suite **650 passed, 36 deselected**; long suite (`-m "slow or e2e"`) **36 passed**.
+  - Coverage total **96 %**; `planning/endpoint.py` 98 %, `core/distance.py` 99 %, `perf.py` 93 %, `e5_diagnostics.py` 92 %.
+- **Not verified here:**
+  - a CI run;
+  - other hardware, and the final code on battery power;
+  - a full E5 (learned controllers, shield ablation).
+
+### V-11 — Project Issue #4: independent Windows verification, documentation and audit (2026-11-19)
+- **Scope:** documentation, audit and commit planning only. No source file, test, configuration or result was changed in this step. No Git operations.
+- **Independent verification** (performed by the student on Windows 11, build 26300; CPython 3.14.3; NumPy 2.4.6; Intel CPU, 12 logical CPUs; AC power, battery 100 % at start and end). The gate results below are as reported by the student; they were not re-run in this step.
+  - `ruff check .` passed; `ruff format --check .`: 126 files already formatted; `mypy src/robocoord`: no issues in 62 source files.
+  - Fast suite: 650 passed, 36 deselected. Slow/E2E suite: 36 passed, 650 deselected.
+  - **Distinct passing tests: 686** (650 + 36). The focused endpoint run, 52 passed in 34.78 s, is a **subset** of those 686, not extra tests. It is `test_endpoint.py` (21) plus `test_endpoint_integration.py` (31); these counts were checked by collection in this step.
+  - Benchmark: `python -m robocoord.experiments.perf --out results/perf_verify --workload R --impl legacy,fast`. Workload R, 4 401 measured steps per implementation. Fast maximum 10.56 ms and 0 fast steps at or above 20 ms; legacy 40 steps at or above 20 ms, all first steps. Per-step digests identical in 4/4 configurations; deliveries identical; 0 physical collisions. The figures in `05` §B.6 were read from `results/perf_verify/nfr_perf1.json` and match the student's report.
+- **Two evidence sets, kept apart:**
+  - the **original implementation benchmark** is `results/perf_r4/` (fast max 9.53 ms);
+  - the **independent Windows verification** is `results/perf_verify/` (fast max 10.56 ms).
+
+  They are not merged or averaged. Their p99 values differ (fast p99 up to 1.6× between the runs), so the documentation treats one run as evidence and not as a guarantee.
+- **Scope statements added or corrected:**
+  - NFR-PERF-1 is an **A\*** requirement; workload R is the A\* requirement workload;
+  - RRT\* steps in workload F still exceed 20 ms in 23–34 % of steps, reported as a limitation of RRT\* and not as a failure of the A\* requirement;
+  - the bound is established for workload R on AC power on this Windows machine, and not on battery, on other hardware, or for RRT\*.
+- **Corrections made while checking the documents against the evidence** (no measured value changed):
+  1. Removed "on battery, step times varied 2–4× between consecutive runs": not measured in a controlled way.
+  2. Removed "RRT\* cost is RRT\* planning, not distance fields": RRT\* was not profiled after the optimisation.
+  3. "each field about 5× cheaper" → "3–6× in the micro-benchmarks (3.0–5.7×)".
+  4. Relabelled `results/perf_r4/` as the original implementation benchmark everywhere (it was called "final").
+  5. The endpoint test counts in `04` §5.6 are 21 and 31 (plus 7 in the evidence file), matching collection.
+- **Inconsistency found and corrected (comment-only):** the header comment of `configs/experiments/e5_prelim.toml` still said the reference-follower half and all learned controllers "remain for Issues #6/#8" and that the slice was "baseline only". It now names the reference half (`e5_prelim_reference.toml`) and the recovery configs (`e5_recovery*.toml`), and states that endpoint recovery is off for this file. The parsed configuration is unchanged (SHA-256 `13b112ae…` before and after).
+- **Repository-level dependency pins approved by the student (2026-11-19):** `scipy==1.18.1` (dev extra, test and experiment oracle only) and `hypothesis==6.155.7` (dev extra, Windows Application Control) in `pyproject.toml` and `requirements-lock.txt`. The approval covers the repository change, not only the local install.
+- **Preliminary E5 status (unchanged):** the non-learned preliminary evaluation (baseline and reference, with and without endpoint recovery). It is **not** the full E5, which needs the learned controllers and the shield ablation.
+- **Offline regression: endpoint off equals the stored pre-recovery records** (evidence outside the repository tests; the script is in the session scratchpad and is not committed). Every 12th stored record of each half (100 of the 1 200 no-recovery records) was replayed with the `endpoint` key absent. Steps, released and delivered tasks, robot moves, conflicts, physical collisions, mean flow time and makespan matched the stored values in all 100 episodes (0 mismatches). The repository test `test_endpoint_off_equals_absent_key_and_adds_no_recovery` checks only that explicit `"off"` equals the absent key, not this comparison.
+- **Documentation cleanup (comments and documents only, no algorithm change):** stale T1–T6 and "no deadlock detour / no parking" statements corrected in `control/baseline.py`, `planning/{deadlock,monitor}.py`, `tests/unit/planning/test_monitor.py`, `tests/integration/test_baseline_integration.py`, `docs/{01,02,03}`; FR-PLAN-4 annotated with the Issue #4 triggers without changing the requirement; the E5 run totals (1 200 without recovery, 2 400 in all) made explicit in `docs/05` and `docs/07`; the endpoint-off test renamed and its docstring corrected.
+- **Not verified here:** a CI run; other hardware; the final code on battery power.

@@ -229,6 +229,31 @@ flowchart LR
   - `feat(allocation): add sequential auction baseline and allocation triggers`
   - `feat(control): add reference follower, priority-aware baseline and safety shield`
   - `exp(allocation): add allocation experiments E3 and results`
+- **Scope reconciliation and outcome (Project Issue #4, 2026-11-18).**
+  - **Numbering.** This plan's *Project Issue #4* (this section) is tracked on GitHub as **GitHub issue #8**. This plan's own *Issue #8* (interactive visualisation, full evaluation, final documentation; below) is a different issue, and it is the one `05` §B.4 means when it assigns the *final* E5 to "#8". Elsewhere in this document "Issue #n" means the plan's numbering.
+  - *Scope history.* A temporary narrow scope excluded the reference follower, the shield and X-10. The student's final authorization restored the full scope above and added a **deadlock-detour mechanism (stage 5B)**, which was not in the original plan. Nothing above is deleted. The table records what was delivered against each item.
+
+  | Item | Delivered | Evidence |
+  |---|---|---|
+  | `allocation.benefits`, `auction` (ε-scaling, fixed ε), `sequential` | yes | `04` §4.1–4.2 notes; Hungarian-oracle property tests; E3a |
+  | Triggers and coordinator policy (pre-emption, hysteresis, release) | yes, plus the keep-current tie-break | `04` §4.3 notes |
+  | `control.reference` | yes (action-identical to the Issue #3 follower) | `04` §5.3; X-10 tests |
+  | `control.baseline` (right-of-way) | yes | `04` §5.3; collision property G19 |
+  | `control.shield` | yes | `04` §5.4; G23 |
+  | X-10 with real suggested actions | yes (categories in model §9.2) | `tests/integration/test_shield_x10_integration.py` |
+  | Deadlock detour (new, stage 5B) | yes, opt-in, default on for the baseline | `04` §5.5; G21, G22 |
+  | End-to-end `simulate`, every planner × allocator × controller × shield | yes, 16 combinations | `tests/integration/test_cli_matrix.py` |
+  | E3a / E3b with paired statistics | yes | `05` §B.6 E3 |
+  | Preliminary non-learned E5 | yes: **both non-learned controllers**, baseline and reference follower. Planner × allocator × dynamics × 50 test seeds per controller = 1 200 paired episodes without endpoint recovery; the same instances with endpoint recovery add 1 200 more (2 400 E5 runs in total, `05` §B.6). The baseline half was run first; the reference half was added after the audit. Learned controllers, the shield ablation and the final E5 remain for the plan's Issues #5/#6 (preliminary) and #8 (final). **Not the full E5.** | `05` §B.6 E5 |
+  | NFR-PERF-1 measured (an **A\*** requirement) | yes. **Before** optimisation: not met as a per-step bound (21–29 of ≈ 2 800 steps per run ≥ 20 ms, all first or map-event steps). **After** the follow-up optimisation (O1 flat BFS, O2 component reachability, symmetric field reuse; exact): **met as a strict per-step maximum for workload R on AC power on this machine**, in the original benchmark (max 9.53 ms over 4 401 steps) and in an independent Windows verification (`results/perf_verify/`, max 10.56 ms). Every A\* configuration of the full workload stays below 20 ms (max 15.43 ms). RRT\* is outside NFR-PERF-1; its steps still exceed 20 ms in 23–34 % of workload F, reported as a limitation. An intermediate run on battery power exceeded on 3 of 40 first steps; the final code was not measured on battery. | `05` §B.6 NFR-PERF-1 |
+  | Endpoint recovery (follow-up, approved after the audit) | yes: idle-robot parking and retreat from a persistently held goal, on by default with an allocator for both controllers (`--endpoint off` restores the earlier behaviour). Preliminary E5, baseline: 91 → 8 undelivered tasks, 83 → 8 incomplete episodes, 0 regressions; reference: 1 357 → 1 286. The remaining endpoint cases are reported (`attempts_exhausted`, `unresolved_*_at_end`). No delivery guarantee (G26). | `04` §5.6; `05` §B.6 E5; G25–G27 |
+  | Scenario tests X-5 (allocation part) and X-6 | covered by the allocation and CLI integration tests | `tests/integration/test_allocation_integration.py`, `test_cli_matrix.py` |
+
+  - *Acceptance criteria.*
+    - Criteria 1–3 and 5 are met with the evidence above.
+    - Criterion 4 is met for {reference, baseline} × both planners × both allocators × shield on/off on the static (`headon_two_lane`) and dynamic (`demo_delivery`, `random_warehouse`, `preemption`) demos.
+    - The AC-6 delivery part holds for the baseline on these designated demos (with endpoint recovery on, the default, and off; `test_cli_matrix.py`). Its stated assumption: tasks that stay available. Endpoint recovery now parks idle robots off active endpoints, but it does not guarantee delivery in general (G26).
+  - *Demo scenarios added:* `headon_two_lane` (detour resolves), `headon_single_lane` (reported unresolved), `preemption` (urgent-task pre-emption), `shield_corridor` (shield interventions; not a delivery demo).
 
 ---
 

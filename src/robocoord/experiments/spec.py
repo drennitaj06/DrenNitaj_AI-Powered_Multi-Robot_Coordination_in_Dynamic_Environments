@@ -34,7 +34,7 @@ from typing import Any
 
 from robocoord.core.errors import ConfigError
 
-KINDS = ("planner_queries", "replanning")
+KINDS = ("planner_queries", "replanning", "assignment", "allocation_episode", "system_episode")
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,57 @@
+# PRELIMINARY E5 slice (Issue #4): NOT the full E5 experiment.
+#
+# The full E5 (planner × controller {reference, baseline, MADQL, PPO} × allocator × dynamics ×
+# 50 test seeds) is assigned by the plan to Issue #6 (preliminary) and Issue #8 (final); see
+# docs/05 §B.4. This file is the BASELINE half of the preliminary non-learned E5 that Project
+# Issue #4 (GitHub issue #8) asks for: planner {A*, RRT*} × allocator {auction, sequential} ×
+# dynamics {static, obstacles, full (+ map events + arrivals)} × 50 test seeds = 600 episodes.
+# The reference-follower half is configs/experiments/e5_prelim_reference.toml; the endpoint-
+# recovery runs are e5_recovery.toml (baseline) and e5_recovery_reference.toml (reference).
+# Learned controllers (MADQL, PPO), the shield ablation and the full E5 are not part of Issue #4.
+#
+# Proposed experimental parameters: 32 × 32 random map (15 % obstacles), N = 8 robots, 2N = 16
+# scheduled tasks; "obstacles" adds 8 moving obstacles (random walk / patrol); "full" adds 6
+# map events of 20 steps and Bernoulli arrivals (rate 0.05 until t = 200); cap 400 steps.
+# Baseline with the deadlock resolver on and the shield off. Endpoint recovery is OFF: this file
+# has no `endpoint` key, which the executor reads as "off", so these records stay reproducible.
+# Test seeds 20200–20249, paired across all factors.
+#
+#   python -m robocoord experiment --config configs/experiments/e5_prelim.toml
+#   python -m robocoord.experiments.analysis results/experiments/e5_prelim
+
+[experiment]
+name = "e5_prelim"
+kind = "system_episode"
+description = "Preliminary non-learned E5 slice: baseline controller only"
+seed_base = 20200
+timeout_s = 900.0
+workers = 10
+
+[factors]
+planner = ["astar", "rrtstar"]
+allocator = ["auction", "sequential"]
+dynamics = ["static", "obstacles", "full"]
+seed = [20200, 20201, 20202, 20203, 20204, 20205, 20206, 20207, 20208, 20209,
+        20210, 20211, 20212, 20213, 20214, 20215, 20216, 20217, 20218, 20219,
+        20220, 20221, 20222, 20223, 20224, 20225, 20226, 20227, 20228, 20229,
+        20230, 20231, 20232, 20233, 20234, 20235, 20236, 20237, 20238, 20239,
+        20240, 20241, 20242, 20243, 20244, 20245, 20246, 20247, 20248, 20249]
+
+[fixed]
+size = 32
+density = 0.15
+robots = 8
+tasks_per_robot = 2
+obstacles = 8
+max_steps = 400
+arrival_rate = 0.05
+arrivals_until = 200
+
+[[planners]]
+label = "astar"
+name = "astar"
+
+[[planners]]
+label = "rrtstar"
+name = "rrtstar"
+options = { max_iterations = 1000 }

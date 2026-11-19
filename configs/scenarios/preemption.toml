@@ -1,0 +1,53 @@
+# Allocation and pre-emption demo (Issue #4 stage 4): robot 0 is assigned the level-1 task 0
+# far to the right at t = 0. At t = 3 an urgent level-3 task (task 1) appears behind it; its
+# benefit exceeds the current one by far more than the hysteresis h = 2, so the auction
+# switches robot 0 to it (the robot replans with T1 in the same step). Task 0 returns to
+# pending; when robot 1 delivers its own task (t = 6) the delivery triggers an auction that
+# gives task 0 to robot 1, now the closer robot. A patrolling obstacle crosses the upper lane.
+# (Observed trace: pre-emption at t = 3; task 0 → robot 1 at t = 6; all three delivered.)
+#
+#   python -m robocoord simulate --scenario configs/scenarios/preemption.toml --planner astar --allocator auction
+
+[scenario]
+name = "preemption"
+description = "An urgent task pre-empts an assignment before pickup"
+seed = 2
+max_steps = 120
+num_priorities = 3
+
+[map]
+rows = [
+  "################################",
+  "#..............................#",
+  "#..............................#",
+  "################################",
+]
+
+[[robots]]
+start = [10, 1]
+
+[[robots]]
+start = [29, 2]
+
+[[obstacles]]
+start = [15, 2]
+model = "patrol"
+waypoints = [[15, 2], [21, 2]]
+
+[[tasks]]              # task 0: level 1, far right
+pickup = [27, 1]
+dropoff = [28, 1]
+priority = 1
+release = 0
+
+[[tasks]]              # task 1: urgent (level 3), appears behind robot 0 at t = 3
+pickup = [6, 1]
+dropoff = [4, 1]
+priority = 3
+release = 3
+
+[[tasks]]              # task 2: robot 1's work on the right
+pickup = [30, 2]
+dropoff = [25, 2]
+priority = 2
+release = 0

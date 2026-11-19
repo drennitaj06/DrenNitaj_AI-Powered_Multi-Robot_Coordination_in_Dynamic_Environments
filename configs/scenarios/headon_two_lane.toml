@@ -1,0 +1,43 @@
+# Deadlock-detour demo (Issue #4 stage 5B): two robots carry tasks to opposite ends of a
+# two-lane corridor and meet head-on at x = 5 / 6 at t = 4.
+#
+# * baseline + resolver (the default for --controller baseline with an allocator): the
+#   lower-priority robot steps into the other lane (trigger T7), the other passes, the yielder
+#   rejoins (T7) and both tasks are delivered.
+# * baseline with --deadlock off: both robots wait forever; T4 fires for both at the same step
+#   and the symmetric replans meet again (the stage 5A finding).
+#
+#   python -m robocoord simulate --scenario configs/scenarios/headon_two_lane.toml --planner astar --allocator auction
+#   python -m robocoord simulate --scenario configs/scenarios/headon_two_lane.toml --planner astar --allocator auction --deadlock off
+
+[scenario]
+name = "headon-two-lane"
+description = "Two-lane head-on encounter: resolved by the deadlock detour"
+seed = 1
+max_steps = 60
+
+[map]
+rows = [
+  "############",
+  "#..........#",
+  "#..........#",
+  "############",
+]
+
+[[robots]]
+start = [1, 1]
+
+[[robots]]
+start = [10, 1]
+
+[[tasks]]
+pickup = [2, 1]
+dropoff = [10, 1]
+priority = 1
+release = 0
+
+[[tasks]]
+pickup = [9, 1]
+dropoff = [1, 1]
+priority = 2
+release = 0
