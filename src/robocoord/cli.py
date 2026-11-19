@@ -3,10 +3,19 @@
 Commands:
 
 * ``simulate`` — run a scenario headless or as a terminal animation, print metrics, write a trace.
-  ``--planner astar|rrtstar`` (Issue #3) attaches the path planner with its monitor; robots then
-  follow the planner's suggested actions (fixture task assignments from the ``[script]`` section).
+  ``--planner astar|rrtstar`` (Issue #3) attaches the path planner with its monitor.
+  Without ``--allocator`` tasks come from the scenario's ``[script]`` fixture (Issue #3);
+  ``--allocator auction|sequential`` (Issue #4) allocates them with the event-triggered auction
+  or the sequential baseline. ``--controller reference|baseline`` (Issue #4) selects the
+  reference follower or the right-of-way baseline (default with ``--allocator``: ``baseline``);
+  ``--shield off|predictive`` the safety shield (default ``off``); ``--deadlock auto|on|off`` the
+  deadlock-detour resolver (default ``auto`` = on exactly for ``baseline`` with an allocator);
+  ``--endpoint on|off`` endpoint recovery (idle-robot parking and retreat from a persistently held
+  task goal; default on with an allocator, for every controller; ``off`` restores the earlier
+  behaviour). The 2 × 2 × 2 × 2 planner × allocator × controller × shield matrix is selectable
+  here.
 * ``validate`` — load and validate a scenario file.
-* ``experiment`` — run an experiment specification (Issue #3: E1, E2).
+* ``experiment`` — run an experiment specification (Issue #3: E1, E2; Issue #4: E3, E5 prelim.).
 """
 
 from __future__ import annotations
@@ -36,7 +45,9 @@ from robocoord.sim.metrics import EpisodeMetrics
 from robocoord.sim.text_render import enable_windows_ansi, render_frame
 from robocoord.sim.trace import TraceWriter
 
-CONTROLLERS = ("scripted", "random", "stay", "follow")
+CONTROLLERS = ("scripted", "random", "stay", "follow", "reference", "baseline")
+ALLOCATORS = ("auction", "sequential")
+PLAN_CONTROLLERS = ("follow", "reference", "baseline")  # need suggested actions (--planner)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,13 +65,42 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CONTROLLERS,
         default=None,
         help="scripted (default if the scenario has a [script]), random (masked), stay, "
-        "follow (plays the planner's suggested actions; default with --planner)",
+        "follow (plays the planner's suggested actions; default with --planner), "
+        "reference (reference follower, Issue #4), baseline (right-of-way baseline, Issue #4; "
+        "default with --allocator)",
     )
     sim.add_argument(
         "--planner",
         choices=("astar", "rrtstar"),
         default=None,
         help="attach a path planner (A* or RRT*) with the path monitor",
+    )
+    sim.add_argument(
+        "--allocator",
+        choices=ALLOCATORS,
+        default=None,
+        help="allocate tasks with the auction or the sequential baseline (needs --planner); "
+        "without it tasks come from the scenario's [script] fixture",
+    )
+    sim.add_argument(
+        "--shield",
+        choices=("off", "predictive"),
+        default="off",
+        help="safety shield between controller and arbiter (default off)",
+    )
+    sim.add_argument(
+        "--deadlock",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="deadlock-detour resolver (needs --allocator); auto = on exactly for the baseline "
+        "controller (default auto)",
+    )
+    sim.add_argument(
+        "--endpoint",
+        choices=("on", "off"),
+        default=None,
+        help="endpoint recovery: idle-robot parking and retreat from a persistently held task "
+        "goal (needs --allocator; default on with an allocator, for every controller)",
     )
     sim.add_argument(
         "--rrt-iterations", type=int, default=None, help="RRT* iteration budget per call"
@@ -92,13 +132,63 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def resolve_deadlock(mode: str, controller: str, allocator: str | None) -> bool:
+    """The documented default: ``auto`` enables the resolver exactly for the baseline controller
+    with an allocator; ``on`` requires an allocator."""
+    if mode == "on" and allocator is None:
+        raise ConfigError("deadlock", "--deadlock on needs --allocator")
+    if mode == "auto":
+        return controller == "baseline" and allocator is not None
+    return mode == "on"
+
+
+def resolve_endpoint(mode: str | None, allocator: str | None) -> bool:
+    """The documented default: endpoint recovery is on with an allocator (every controller);
+    an explicit ``on`` requires an allocator."""
+    if mode == "on" and allocator is None:
+        raise ConfigError("endpoint", "--endpoint on needs --allocator")
+    if mode is None:
+        return allocator is not None
+    return mode == "on"
+
+
 def make_controller(
     name: str,
     spec: ScenarioSpec,
     seed: int,
     planner: str | None = None,
     rrt_iterations: int | None = None,
+    allocator: str | None = None,
+    deadlock: bool = False,
+    endpoint: bool = False,
 ) -> tuple[Controller, Coordinator]:
+    if allocator is not None:
+        from robocoord.allocation.auction import AuctionAllocator
+        from robocoord.allocation.sequential import SequentialAllocator
+        from robocoord.planning import make_planner
+        from robocoord.planning.coordinator import AllocationCoordinator
+        from robocoord.planning.deadlock import DetourParams
+        from robocoord.planning.endpoint import EndpointParams
+
+        if planner is None:
+            raise ConfigError("allocator", "--allocator needs --planner")
+        if name not in PLAN_CONTROLLERS:
+            raise ConfigError(
+                "controller", f"with --allocator choose one of {PLAN_CONTROLLERS}, got {name!r}"
+            )
+        options = (
+            {}
+            if rrt_iterations is None or planner != "rrtstar"
+            else {"max_iterations": rrt_iterations}
+        )
+        alloc = AuctionAllocator() if allocator == "auction" else SequentialAllocator()
+        acoord = AllocationCoordinator(
+            make_planner(planner, **options),
+            alloc,
+            deadlock=DetourParams() if deadlock else None,
+            endpoint=EndpointParams() if endpoint else None,
+        )
+        return _plan_controller(name), acoord
     if planner is not None:
         from robocoord.planning import make_planner
         from robocoord.planning.coordinator import PlanningCoordinator
@@ -113,15 +203,15 @@ def make_controller(
             else {"max_iterations": rrt_iterations}
         )
         coord = PlanningCoordinator(make_planner(planner, **options), spec.script.assignments)
-        if name == "follow":
-            return SuggestionFollower(), coord
+        if name in PLAN_CONTROLLERS:
+            return _plan_controller(name), coord
         if name == "random":
             return RandomController(make_streams(seed).generator("policy")), coord
         if name == "stay":
             return StayController(), coord
         return ScriptedController(spec.script.actions), coord
-    if name == "follow":
-        raise ScenarioError("controller", "the follow controller needs --planner")
+    if name in PLAN_CONTROLLERS:
+        raise ScenarioError("controller", f"the {name} controller needs --planner")
     if name == "scripted":
         if spec.script is None:
             raise ScenarioError("script", "the scripted controller needs a [script] section")
@@ -134,6 +224,18 @@ def make_controller(
     if name == "random":
         return RandomController(make_streams(seed).generator("policy")), coordinator
     return StayController(), coordinator
+
+
+def _plan_controller(name: str) -> Controller:
+    if name == "reference":
+        from robocoord.control.reference import ReferenceFollower
+
+        return ReferenceFollower()
+    if name == "baseline":
+        from robocoord.control.baseline import BaselineController
+
+        return BaselineController()
+    return SuggestionFollower()
 
 
 def format_metrics(m: EpisodeMetrics) -> str:
@@ -182,15 +284,76 @@ def format_planning(p: dict[str, object], adherence: float | None) -> str:
     )
 
 
+def format_extra(extra: dict[str, object]) -> list[str]:
+    """Allocation, deadlock, controller and shield statistics (Issue #4), when present."""
+    lines = []
+    planning = extra.get("planning")
+    if isinstance(planning, dict):
+        if "allocation" in planning:
+            a = planning["allocation"]
+            lines.append(
+                f"allocation ({a['allocator']}): {a['auctions']} auctions | triggers "
+                f"{a['triggers']} | assignments {a['assignments']} | pre-emptions "
+                f"{a['preemptions']} | lost {a['lost']} | tasks reassigned {a['tasks_reassigned']}"
+            )
+        if "deadlock" in planning:
+            d = planning["deadlock"]
+            detected = f"{d['detected_persistent']}+{d['detected_recurrent']}"
+            lines.append(
+                f"deadlock resolver: detected {detected} | detours {d['detours_started']} | "
+                f"released {d['released']} (timeout {d['released_timeout']}) | aborted "
+                f"{d['aborted']} | no passing place {d['no_passing_place']} (dynamic "
+                f"{d['no_passing_place_dynamic']}) | unresolved at end {d['unresolved_at_end']}"
+            )
+        if "endpoint" in planning:
+            e = planning["endpoint"]
+            lines.append(
+                f"endpoint recovery: blockages temporary {e['blockages_temporary']} / persistent "
+                f"{e['blockages_persistent']} | retreats {e['retreats_started']} (succeeded "
+                f"{e['retreats_succeeded']}, timed out {e['retreats_timed_out']}, aborted "
+                f"{e['retreats_aborted']}) | exhausted {e['attempts_exhausted']} | parking "
+                f"{e['parking_started']} (completed {e['parking_completed']}) | no parking cell "
+                f"{e['no_parking_cell']} | no retreat cell {e['no_retreat_cell']} | unresolved at "
+                f"end {e['unresolved_obstacle_at_end'] + e['unresolved_idle_robot_at_end']}"
+            )
+    ctrl = extra.get("controller")
+    if isinstance(ctrl, dict):
+        lines.append(f"controller ({ctrl['controller']}): decisions {ctrl['decisions']}")
+    shield = extra.get("shield")
+    if isinstance(shield, dict):
+        lines.append(
+            f"shield ({shield['mode']}): interventions {shield['interventions']} | prevented "
+            f"{shield['prevented']} | introduced {shield['introduced']}"
+        )
+    return lines
+
+
 def cmd_simulate(args: argparse.Namespace) -> int:
     spec = load_scenario(args.scenario, seed=args.seed)
-    if args.planner is not None:
+    if args.allocator is not None:
+        controller_name = args.controller or "baseline"
+    elif args.planner is not None:
         controller_name = args.controller or "follow"
     else:
         controller_name = args.controller or ("scripted" if spec.script is not None else "random")
+    deadlock = resolve_deadlock(args.deadlock, controller_name, args.allocator)
+    endpoint = resolve_endpoint(args.endpoint, args.allocator)
     controller, coordinator = make_controller(
-        controller_name, spec, spec.seed, args.planner, args.rrt_iterations
+        controller_name,
+        spec,
+        spec.seed,
+        args.planner,
+        args.rrt_iterations,
+        args.allocator,
+        deadlock,
+        endpoint,
     )
+    shield = None
+    if args.shield != "off":
+        from robocoord.control.shield import Shield
+
+        shield = Shield(args.shield)
+    stats = getattr(controller, "episode_stats", None)
     trace = TraceWriter(args.trace) if args.trace else None
     ansi_ok = enable_windows_ansi()
     color = args.color and ansi_ok
@@ -201,6 +364,8 @@ def cmd_simulate(args: argparse.Namespace) -> int:
             trace=trace,
             stop_when_done=not args.run_to_max,
             max_steps=args.max_steps,
+            shield=shield,
+            controller_stats=stats if controller_name in ("reference", "baseline") else None,
         )
         controller.reset(len(engine.robots))
         animate = not args.no_animate and not args.json
@@ -234,11 +399,13 @@ def cmd_simulate(args: argparse.Namespace) -> int:
         planning = metrics.extra.get("planning")
         if planning:
             print(format_planning(planning, metrics.plan_adherence))
+        for line in format_extra(metrics.extra):
+            print(line)
         if isinstance(coordinator, NullCoordinator) and metrics.tasks_released:
             print(
                 "note: no task coordinator is attached to this run, so tasks are never assigned "
-                "or picked up (delivered 0 is expected). The auction allocator arrives in "
-                "Issue #4; use a scenario with a [script] section to see deliveries now."
+                "or picked up (delivered 0 is expected). Use --planner with --allocator "
+                "auction|sequential, or a scenario with a [script] section."
             )
         if args.trace:
             print(f"trace written to {args.trace}")
