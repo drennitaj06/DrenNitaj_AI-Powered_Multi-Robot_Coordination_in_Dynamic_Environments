@@ -153,6 +153,15 @@ class _MonitoredCoordinator:
         assert self.monitor is not None
         return [self.monitor.suggested(r.id, r.position) for r in view.robots]
 
+    def reference_paths(self, limit: int) -> tuple[tuple[Cell, ...] | None, ...]:
+        """Remaining reference path per robot, at most ``limit`` moves (``PathReporting``)."""
+        assert self.monitor is not None
+        out: list[tuple[Cell, ...] | None] = []
+        for i in range(len(self.monitor.states)):
+            path = self.monitor.reference_path(i)
+            out.append(None if path is None else path[: limit + 1])
+        return tuple(out)
+
     # ------------------------------------------------------------------ reporting (engine hooks)
     def plan_valid(self) -> tuple[bool, ...]:
         assert self.monitor is not None

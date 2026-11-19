@@ -44,7 +44,7 @@ from robocoord.sim.conflicts import (
     detect_conflicts,
     physical_violations,
 )
-from robocoord.sim.coordinator import Coordinator, NullCoordinator, PlanReporting
+from robocoord.sim.coordinator import Coordinator, NullCoordinator, PathReporting, PlanReporting
 from robocoord.sim.metrics import EpisodeMetrics, MetricsRecorder
 from robocoord.sim.trace import TraceWriter
 from robocoord.sim.view import (
@@ -83,6 +83,9 @@ class EngineStateError(RuntimeError):
 
 
 _MODE_CODE = {RobotMode.IDLE: "I", RobotMode.TO_PICKUP: "P", RobotMode.TO_DROPOFF: "D"}
+
+#: Optional view data for learned controllers (Issue #5); see ``WorldView``.
+VIEW_EXTRAS: frozenset[str] = frozenset({"paths", "goal_distance"})
 
 
 class SafetyLayer(Protocol):
@@ -169,8 +172,19 @@ class Engine:
         max_steps: int | None = None,
         shield: SafetyLayer | None = None,
         controller_stats: Callable[[], dict[str, Any]] | None = None,
+        view_extras: frozenset[str] = frozenset(),
+        path_limit: int = 16,
     ) -> None:
         scenario.validate()
+        unknown = set(view_extras) - VIEW_EXTRAS
+        if unknown:
+            raise ValueError(f"unknown view extras {sorted(unknown)}; known: {sorted(VIEW_EXTRAS)}")
+        if path_limit < 1:
+            raise ValueError("path_limit must be >= 1")
+        # Opt-in data for learned controllers (Issue #5). Added only to the view a controller acts
+        # on; reading it has no side effect on the simulation, its traces or its metrics.
+        self.view_extras = frozenset(view_extras)
+        self.path_limit = path_limit
         self.scenario = scenario
         self.shield = shield if shield is not None and shield.enabled else None
         self.controller_stats = controller_stats  # adds extra["controller"] to the summary
@@ -302,7 +316,9 @@ class Engine:
         suggestions = self.coordinator.suggested_actions(self._build_view(None))
         if suggestions is not None and len(suggestions) != len(self.robots):
             raise EngineStateError("coordinator must suggest one action per robot")
-        pending.view = self._build_view(tuple(suggestions) if suggestions is not None else None)
+        pending.view = self._build_view(
+            tuple(suggestions) if suggestions is not None else None, extras=True
+        )
         return pending.view
 
     def apply_actions(self, actions: Mapping[int, Action]) -> StepOutcome:
@@ -464,8 +480,20 @@ class Engine:
         return metrics
 
     # ================================================================== views and traces
-    def _build_view(self, suggested: tuple[Action, ...] | None) -> WorldView:
+    def _build_view(
+        self, suggested: tuple[Action, ...] | None, *, extras: bool = False
+    ) -> WorldView:
         tasks = self.book.tasks
+        paths: tuple[tuple[Cell, ...] | None, ...] | None = None
+        goal_distance: tuple[int | None, ...] | None = None
+        if extras and "paths" in self.view_extras and isinstance(self.coordinator, PathReporting):
+            paths = self.coordinator.reference_paths(self.path_limit)
+        if extras and "goal_distance" in self.view_extras:
+            goals = [r.goal(tasks) for r in self.robots]
+            goal_distance = tuple(
+                None if g is None else self.oracle.capped_distance(r.position, g)
+                for r, g in zip(self.robots, goals, strict=True)
+            )
         return WorldView(
             t=self.t,
             max_steps=self.max_steps,
@@ -489,6 +517,8 @@ class Engine:
             ),
             masks=tuple(action_mask(self.grid, r.position) for r in self.robots),
             suggested=suggested,
+            reference_paths=paths,
+            goal_distance=goal_distance,
         )
 
     def _header(self) -> dict[str, object]:

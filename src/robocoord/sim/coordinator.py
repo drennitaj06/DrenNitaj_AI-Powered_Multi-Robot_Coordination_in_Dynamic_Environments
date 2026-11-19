@@ -11,7 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from robocoord.core.distance import DistanceOracle
 from robocoord.core.rng import SeedStreams
-from robocoord.core.types import Action
+from robocoord.core.types import Action, Cell
 from robocoord.sim.view import WorldView
 from robocoord.world.entities import RobotMode, TaskStatus
 
@@ -62,6 +62,16 @@ class PlanReporting(Protocol):
 
     def finish(self, view: WorldView) -> None:
         """Called once when the episode ends, with the final state."""
+        ...
+
+
+@runtime_checkable
+class PathReporting(Protocol):
+    """Optional extension of a planning coordinator (Issue #5): the current reference path of
+    every robot, read by the engine only when ``view_extras`` asks for paths."""
+
+    def reference_paths(self, limit: int) -> tuple[tuple[Cell, ...] | None, ...]:
+        """Per robot: the remaining path ``c_ℓ, …, c_{ℓ+limit}`` or ``None`` without a plan."""
         ...
 
 
