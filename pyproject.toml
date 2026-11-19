@@ -15,14 +15,19 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 # Runtime dependencies are added in the issue that first needs them
-# (torch: Issue #5, scipy: Issue #4, pandas/matplotlib: experiments, pygame-ce: Issue #8).
+# (torch: Issue #5, pandas/matplotlib: experiments, pygame-ce: Issue #8).
 dependencies = ["numpy>=2.0"]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
-    "hypothesis>=6.100",
+    # Exact pin, identical in CI and locally (Issue #4): 6.155.7 is the newest pure-Python
+    # release; from 6.156.1 on hypothesis ships a compiled module that Windows Application Control
+    # blocks on the development machine. See docs/verification-log.md.
+    "hypothesis==6.155.7",
+    # Test and experiment oracle only (Hungarian assignment, Wilcoxon); never the allocator.
+    "scipy==1.18.1",
     "ruff>=0.6",
     "mypy>=1.11",
 ]
