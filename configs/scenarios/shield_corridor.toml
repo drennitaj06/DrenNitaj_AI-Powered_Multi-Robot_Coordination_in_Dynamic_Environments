@@ -1,0 +1,36 @@
+# Safety-shield demo (Issue #4 stage 6): one robot and an obstacle bouncing in a single-lane
+# corridor. The plan must cross the obstacle's cells (a degraded plan), so the plain reference
+# follower proposes robot–obstacle conflicts; the arbiter prevents them. With
+# --shield predictive the shield replaces those moves by "stay" first (interventions are
+# logged in the trace as "shield"). The baseline controller already waits in front of current
+# and predicted obstacle cells, so the shield never intervenes for it.
+#
+#   python -m robocoord simulate --scenario configs/scenarios/shield_corridor.toml --planner astar --allocator auction --controller reference
+#   python -m robocoord simulate --scenario configs/scenarios/shield_corridor.toml --planner astar --allocator auction --controller reference --shield predictive
+
+[scenario]
+name = "shield-corridor"
+description = "Reference follower vs an obstacle in a single-lane corridor, shield off/on"
+seed = 1
+max_steps = 40
+
+[map]
+rows = [
+  "##############",
+  "#............#",
+  "##############",
+]
+
+[[robots]]
+start = [1, 1]
+
+[[obstacles]]
+start = [8, 1]
+model = "bounce"
+direction = "left"
+
+[[tasks]]
+pickup = [2, 1]
+dropoff = [12, 1]
+priority = 1
+release = 0
