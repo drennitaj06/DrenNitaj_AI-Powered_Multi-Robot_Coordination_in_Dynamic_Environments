@@ -86,7 +86,7 @@ sequenceDiagram
     E->>C: 3. on_world_changed(events)
     C->>A: 3a. if allocation trigger: allocate(problem)
     A-->>C: assignment (goal changes → trigger T1)
-    C->>P: 3b. robots with triggers T1–T6: plan(query) via shared constraints + two-stage procedure
+    C->>P: 3b. robots with triggers T1–T8: plan(query) via shared constraints + two-stage procedure
     P-->>C: PlanResult (path | status, degraded, stats)
     E->>K: 4. observations + masks (incl. suggested action) → act()
     K-->>E: raw joint proposal a^ctrl
@@ -102,7 +102,7 @@ Design notes:
 - **Obstacles move independently of robot actions at $t$.** At step 4 the controller sees $z_k(t)$ and velocities but not $z_k(t+1)$. Because $z(t+1)$ does not depend on the robots' actions, the counterfactual conflict sets in step 7 are exact (model §9.2).
 - In the RL loop the controller is *outside* the engine. `MultiRobotEnv` (§5.6) runs steps 1–3, builds the observations and masks of step 4, returns them, receives the actions, and runs steps 5–10. Interactive and experiment loops call the controller themselves. Both share one engine code path.
 - **Allocation triggers:** task released, task delivered, robot became idle, a plan status became `unreachable`, map event. Several triggers in one step cause a single auction.
-- **Replanning triggers** T1–T6 (model §5.4) are evaluated in step 3b. At most one planner call per robot per step.
+- **Replanning triggers** T1–T8 (model §5.4) are evaluated in step 3b. At most one planner call per robot per step. T7 (deadlock detour) occurs only with the opt-in resolver and T8 (endpoint recovery) only with endpoint recovery enabled; both change monitor goals only.
 
 ---
 
@@ -149,6 +149,11 @@ Design notes:
 | `tests` | ubuntu-latest × Python {3.12, 3.13, 3.14}; windows-latest × Python 3.14 | `pip install -e ".[dev]"`, `pytest` (fast suite only); from Issue #5 also CPU-only PyTorch (CPU wheel index on Linux) |
 
 Slow, training and e2e tests run locally before an issue is closed (`05` §A.5), not in CI. CI results are recorded in the verification log by the student's report or a screenshot. Claude cannot see GitHub-hosted runs unless the student shares them.
+
+**Dependency versions: what CI and the local environment share (Issue #4).**
+- CI installs from `pyproject.toml` (`pip install -e ".[dev]"`); the local environment installs from `requirements-lock.txt`. Test tooling that affects test behaviour is pinned **exactly** in `pyproject.toml`, so both resolve the same version: `hypothesis==6.155.7` and `scipy==1.18.1`.
+- **NumPy is deliberately not identical.** The package declares `numpy>=2.0` (a runtime dependency for users), so CI resolves the newest release (2.5.5 at the time of writing). The lock file pins 2.4.6, because Windows Application Control on the development machine blocks NumPy 2.5.5's `random/_philox` extension (Issue #2). This is an OS-policy constraint, not a compatibility one. Both versions satisfy the declared range, and CI therefore also exercises a second NumPy version.
+- **Effect on results:** tests compare runs within one environment, so determinism tests (X-1) are unaffected. Recorded experiments run locally, and every run directory stores its NumPy version in `env.json`. Cross-version bit-identity of `Generator` sampling methods is not assumed: NumPy guarantees stream compatibility for its bit generators, not for every sampling method. Numbers are therefore reproducible with the lock file, not necessarily with another NumPy release.
 
 ---
 
@@ -200,6 +205,10 @@ Each ADR is written once. Later issues reference it rather than re-deciding.
 - **Consequences (revision 2).**
   - The allocation is optimal *for the weighted objective* and guarantees maximum cardinality (G10).
   - It does **not** guarantee strict priority precedence (G11) or starvation freedom (G13). Aging is a mitigation, validated in E3.
+  - *Issue #4 outcome:* implemented as specified.
+    - E3a: optimal on all 280 ε-scaling solves.
+    - E3b: κ > 0 lowers $F_w$ and top-level flow time, with clear paired differences.
+    - In wall time the exact Python auction is 7–11× slower than SciPy's compiled Hungarian at k = 400, and more at small k, so hypothesis H2's "competitive" part is not supported (`05` §B.6).
 
 ### ADR-6: In-house multi-agent environment API
 
@@ -250,6 +259,9 @@ The engine emits a JSON-Lines trace per step (positions, events, conflict sets, 
 - **Consequences.**
   - Safety is measured by **proposed conflicts** and the counterfactual avoided/introduced sets, not by physical collisions, which are 0 by construction and serve as an invariant check (model §9.2).
   - Conflict events are recorded as sets keyed by (step, type, entities).
+  - *Issue #4:* the shield is implemented (`control.shield`) and applied at engine step 5.
+    - The X-10 counterfactual categories are defined in model §9.2.
+    - The coordinator-level deadlock resolver (`04` §5.5) sits *above* these layers. It changes only planner goals, so the mask, shield and arbiter semantics are unchanged.
 
 ---
 
@@ -270,6 +282,8 @@ class DistanceOracle:           # LRU cache keyed by (target, grid.version); cap
     def distance(self, a: Cell, b: Cell) -> int | None: ...
 def load_movingai_map(path) -> OccupancyGrid; def save_movingai_map(grid, path) -> None
 ```
+
+**Project Issue #4 NFR-PERF-1 follow-up (`04` §2.1).** `DistanceOracle` additionally caches, per grid version, the free-neighbour lists of the flat BFS (O1) and the component labels behind `reachable()` (O2), and `distance()` reuses a cached field of either endpoint (symmetry). The API is unchanged. `DistanceOracle(grid, legacy=True)` and the context manager `legacy_distance()` select the pre-optimisation behaviour; they exist only for the equivalence tests and the paired before/after benchmark.
 
 ### 5.2 `world` and `scenario` (Issue #2)
 
@@ -340,7 +354,7 @@ class NeighborIndex(Protocol):            # RRT* only
     def insert(self, p: np.ndarray) -> int: ...
     def nearest(self, q: np.ndarray) -> int: ...
     def radius(self, q: np.ndarray, r: float) -> np.ndarray: ...
-class PathMonitor: ...                    # triggers T1–T6, rejoin, stall block list
+class PathMonitor: ...                    # triggers T1–T8, rejoin, stall block list
 ```
 
 **As implemented in Issue #3** (names refined, responsibilities unchanged):
@@ -351,6 +365,12 @@ class PathMonitor: ...                    # triggers T1–T6, rejoin, stall bloc
 - `planning/monitor.py`: `PathMonitor`, `MonitorParams(validity_horizon=5, rejoin_window=3, cooldown=3, stall_threshold=4)`, `PlanCall`.
 - `planning/coordinator.py`: `PlanningCoordinator(planner, assignments)`. It combines fixture assignments (until the Issue #4 allocator), the path monitor and the release/hold policy.
 - `sim/coordinator.py` gains the optional `PlanReporting` protocol (`plan_valid`, `trace_fields`, `episode_stats`, `finish`). The engine uses it for plan adherence, the `"plans"` trace field and `EpisodeMetrics.extra["planning"]`. This is additive; earlier coordinators are unchanged.
+
+**Goal overrides (Project Issue #4).** Two coordinator-level components may replace, for one robot at a time, the goal the path monitor plans to; neither ever chooses an action.
+- `planning/deadlock.py`, `DeadlockResolver` (T7): robot–robot wait-for cycles (`04` §5.5).
+- `planning/endpoint.py`, `EndpointRecovery` (T8): parking of idle robots on active task endpoints and retreat from a persistently held task goal (`04` §5.6).
+
+`AllocationCoordinator(..., deadlock=..., endpoint=...)` composes them: the resolver's overrides come first, endpoint recovery skips robots the resolver overrides, and both reach the monitor through `RobotInput(goal, detour, hold_stall, avoid, trigger, count_active)`. The CLI (`--deadlock`, `--endpoint`), the E5 executor (`fixed.endpoint`) and the benchmark set the system defaults; the bare constructor keeps both opt-in.
 
 ### 5.5 `allocation` (Issue #4)
 
@@ -363,6 +383,14 @@ class Allocator(Protocol):
 def build_benefits(world: WorldView, oracle: DistanceOracle, cfg: BenefitConfig) -> AllocationProblem
 ```
 
+*Issue #4 implementation (stages 1–4)*, a refinement of the sketch above (details in `04` §4.1–4.4 notes):
+- `allocation/benefits.py`: `BenefitConfig(kappa, hysteresis, alpha, scale)`, `RobotCandidate`, `TaskCandidate`, and `build_problem(robots, tasks, t, distance, cfg) -> AllocationProblem`. The problem holds the real-valued `cost`, `priority_value` and `value` matrices (`-inf` = infeasible) and the padded integer `matrix` the allocators solve. The builder takes candidates and a distance function rather than a `WorldView`, which keeps it independent of the simulator.
+- `allocation/base.py`: the `Allocator` protocol (`name`, `allocate(problem) -> AllocationResult`), `SolveStats` and `SquareSolution`.
+- `allocation/auction.py` (`AuctionAllocator`, ε-scaling or fixed ε); `allocation/sequential.py` (`SequentialAllocator`).
+- `allocation/policy.py`: `AllocationPolicy` (triggers, at most one auction per step, eligibility, application, the keep-current tie-break `prefer_current`) and `AllocationEvent`.
+- `planning/coordinator.py`: `AllocationCoordinator(planner, allocator, benefit_config=…)` composes the policy with the path monitor through the existing `Coordinator` and `PlanReporting` protocols. Allocation statistics appear in `EpisodeMetrics.extra["planning"]["allocation"]`, and an `"alloc"` trace field is written per auction.
+  - `PlanningCoordinator` (fixture) is unchanged in interface and behaviour. Both coordinators share a private base class.
+
 ### 5.6 `control` and `marl` (Issues #4–#6)
 
 ```python
@@ -374,6 +402,15 @@ class Shield: def apply(self, view, proposal) -> tuple[dict[int, Action], list[S
 ```
 
 - `control.reference.ReferenceFollower`, `control.baseline.BaselineController`, `control.shield.Shield` (Issue #4).
+  - *Implemented in Issue #4:*
+    - `control.baseline.BaselineController(alpha, sensing_radius)`: `decide(view)` returns each robot's action and decision reason; `episode_stats()` returns decision counts and the waiting share (`04` §5.3).
+    - `control.reference.ReferenceFollower`: action-identical to the Issue #3 `SuggestionFollower`, with decision counts (`04` §5.3).
+    - `control.shield.Shield(mode, sensing_radius)` with `apply(view, proposal) -> (actions, events)` and `stats()` (`04` §5.4). The engine takes it as `Engine(..., shield=...)` through the `SafetyLayer` protocol, so `sim` does not import `control`.
+    - `planning.constraints.sense` now accepts any map with `is_free` (`FreeCellQuery`). The controller and the shield pass the view's `MapView`, keeping one definition of $Z_i, \hat Z_i$.
+    - `planning.deadlock.DeadlockResolver` / `DetourParams` (`04` §5.5), enabled through `AllocationCoordinator(..., deadlock=...)`.
+    - `PathMonitor` takes three optional `RobotInput` fields (`detour`, `hold_stall`, `avoid`); their defaults give the Issue #3 behaviour. It adds trigger T7 and `next_cell()`.
+    - The engine gains an optional `controller_stats` callback, which adds `extra["controller"]`.
+    - The X-10 data are in `StepOutcome` (`controller_events`, `arbitrated_actions`, `shield_events`) and in the trace (`suggested`, `shield`, `arb_actions`). This is the only trace change for existing configurations: with the resolver and shield off, traces of 46 configurations are byte-identical to the pre-Issue-4-stage-5B snapshot once `suggested` is removed.
 - `marl.env.MultiRobotEnv`, `observation`, `reward` (base + potential, model §7), `global_state`, `vector_env`.
 - `marl.madql`, `marl.ppo`, `networks`, `replay`, `rollout`, `trainer`, `checkpoint`.
 - `marl.policy.LearnedController`.
@@ -387,11 +424,25 @@ class Shield: def apply(self, view, proposal) -> tuple[dict[int, Action], list[S
 
 *Issue #3 implementation:* `experiments/spec.py` (TOML `ExperimentSpec`, Cartesian factors, labelled `[[planners]]`), `runner.py` (resumable, process pool, per-run cap recorded as `timeout`, exceptions recorded as `error`, `env.json`), `records.py` (append-only `records.jsonl`), `stats.py` (bootstrap CI, paired bootstrap, Holm, rank-biserial, log–log exponent fits; the Wilcoxon p-value arrives with SciPy in Issue #4), `planning_runs.py` (E1/E2 executors) and `analysis.py` (Markdown summaries). CLI: `python -m robocoord experiment --config configs/experiments/<name>.toml`. Plots are deferred to Issue #8.
 
+*Issue #4 implementation:*
+- `allocation_runs.py`: executors for the kinds `assignment` (E3a), `allocation_episode` (E3b) and `system_episode` (preliminary E5), with the paired instance generators `e3a_matrix`, `e3b_scenario` and `e5_scenario`.
+- `allocation_analysis.py`: their summaries, registered in `analysis.SUMMARIES`.
+- `stats.wilcoxon_p`: SciPy, imported lazily.
+- `perf.py`: the NFR-PERF-1 benchmark, `python -m robocoord.experiments.perf --out results/perf`.
+- SciPy remains a dev/test dependency; E3a and the statistics need `pip install -e ".[dev]"`.
+
 ### 5.8 `viz` and `cli` (Issue #8; CLI grows from Issue #2)
 
 - `python -m robocoord simulate --scenario ... --planner astar|rrtstar --allocator auction|sequential --controller baseline|reference|madql|ppo [--checkpoint ...] [--shield off|predictive] [--trace out.jsonl] [--headless]`
 
   *Implemented so far (Issue #3):* `simulate --planner astar|rrtstar [--rrt-iterations N] [--controller follow|scripted|random|stay]`. Goals come from the scenario's `[script].assignments` fixture until the allocator exists (Issue #4).
+
+  *Issue #4:* `simulate --planner astar|rrtstar --allocator auction|sequential --controller reference|baseline --shield off|predictive [--deadlock auto|on|off]`.
+  - All 16 planner × allocator × controller × shield combinations are selectable without code changes.
+  - Defaults: with `--allocator` the controller is `baseline`; the shield is `off`; `--deadlock auto` enables the resolver exactly for the baseline with an allocator.
+  - Validation (exit code 2): `--allocator` without `--planner`; `--controller` other than follow, reference or baseline with an allocator; `--deadlock on` without an allocator.
+  - Without `--allocator` the Issue #3 fixture path is unchanged and also accepts `reference` and `baseline`.
+  - Text output adds allocation, deadlock, controller and shield lines; `--json` includes them under `extra`.
 - `python -m robocoord train --config ... --seed 1`
 - `python -m robocoord experiment --config ...`
 - `python -m robocoord data prepare <dataset>`
@@ -447,7 +498,7 @@ The shield is **off** during training, so policies receive the conflict signal d
 | Observation size vs team size | Egocentric window plus pooled global summary: $O(1)$ in $N$ and map size |
 | Conflict detection and arbitration | Hash maps and a worklist: $O(N+K)$ expected per step, including the counterfactual detection |
 | Distance queries | BFS fields cached per target and invalidated by `grid.version` |
-| Planner calls | Only on triggers T1–T6, at most one per robot per step, with cooldowns |
+| Planner calls | Only on triggers T1–T8, at most one per robot per step, with cooldowns |
 | RRT\* neighbourhoods | Bentley–Saxe logarithmic method over alternating-median 2-d trees, or a vectorised brute-force index. Bounds in `04` §3.6 (no $O(n\log n)$ claim). |
 | Policy inference | One batched forward pass per step |
 | Training throughput | Synchronous vectorised environments; a process-based vector env is an optional extension |
