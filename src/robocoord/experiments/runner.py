@@ -32,6 +32,14 @@ def _executor(kind: str) -> Executor:
         return planning_runs.run_query
     if kind == "replanning":
         return planning_runs.run_episode
+    from robocoord.experiments import allocation_runs
+
+    if kind == "assignment":
+        return allocation_runs.run_assignment
+    if kind == "allocation_episode":
+        return allocation_runs.run_allocation_episode
+    if kind == "system_episode":
+        return allocation_runs.run_system_episode
     raise ValueError(f"unknown experiment kind {kind!r}")
 
 

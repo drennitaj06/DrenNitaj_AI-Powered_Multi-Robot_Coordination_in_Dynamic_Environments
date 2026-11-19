@@ -1,0 +1,35 @@
+# E3b: priority sensitivity in simulation (05 §B.4; Issue #4, acceptance criterion 3).
+# Scarce-robot suite × variants {default (κ = 10, α = 0.01, h = 2), κ = 0, α = 0, h = 0}
+# × 30 test seeds = 120 episodes; A* + auction + baseline (deadlock resolver on, its default).
+#
+# Proposed experimental parameters (Issue #4 review): 24 × 24 random map (15 % obstacles),
+# N = 4 robots, Bernoulli arrivals until t = 200 with levels 1/2/3 at 0.5/0.3/0.2, episode cap
+# 400 steps. The arrival rate λ = 0.16 was chosen on VALIDATION seeds 10000–10004 (utilisation
+# 0.78–0.90, every task delivered by t = 400), before any test-seed run; test seeds
+# 20100–20129 are not used for any choice. Paired: map, robots and arrival stream depend only
+# on the seed; the variants differ only in (κ, α, h).
+#
+#   python -m robocoord experiment --config configs/experiments/e3b_priority.toml
+#   python -m robocoord.experiments.analysis results/experiments/e3b_priority
+
+[experiment]
+name = "e3b_priority"
+kind = "allocation_episode"
+description = "Paired κ / α / h ablations of the weighted-priority allocation"
+seed_base = 20100
+timeout_s = 600.0
+workers = 8
+
+[factors]
+variant = ["default", "kappa0", "alpha0", "h0"]
+seed = [20100, 20101, 20102, 20103, 20104, 20105, 20106, 20107, 20108, 20109,
+        20110, 20111, 20112, 20113, 20114, 20115, 20116, 20117, 20118, 20119,
+        20120, 20121, 20122, 20123, 20124, 20125, 20126, 20127, 20128, 20129]
+
+[fixed]
+size = 24
+density = 0.15
+robots = 4
+arrival_rate = 0.16
+arrivals_until = 200
+max_steps = 400

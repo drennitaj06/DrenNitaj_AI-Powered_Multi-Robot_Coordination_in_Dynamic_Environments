@@ -1,0 +1,28 @@
+# E3a: assignment algorithms (05 §B.4; Issue #4). k ∈ {5 … 400} × C ∈ {10², 10⁴} × 20 matrices
+# × {auction ε-scaling, auction fixed ε = 1, sequential, Hungarian} = 1 120 solves.
+# Proposed experimental parameters (Issue #4 review): dense matrices with entries uniform in
+# {1, …, C}; every method solves the identical matrix (seeded only by k, C and the matrix index,
+# micro-benchmark seed range 30 000–39 999); wall time = median of 5 repeats; one worker so that
+# timings do not compete for the CPU; a solve is capped at 60 s (recorded as "timeout").
+#
+#   python -m robocoord experiment --config configs/experiments/e3a_assignment.toml
+#   python -m robocoord.experiments.analysis results/experiments/e3a_assignment
+
+[experiment]
+name = "e3a_assignment"
+kind = "assignment"
+description = "Auction (ε-scaling, fixed ε = 1), sequential and Hungarian on identical matrices"
+seed_base = 30400
+timeout_s = 600.0
+workers = 1
+
+[factors]
+k = [5, 10, 20, 50, 100, 200, 400]
+C = [100, 10000]
+matrix = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+method = ["auction_scaling", "auction_fixed1", "sequential", "hungarian"]
+
+[fixed]
+density = 1.0
+repeats = 5
+solve_cap_s = 60.0

@@ -1,8 +1,8 @@
 """Statistics for experiment summaries (05 §B.3): bootstrap confidence intervals, paired
 bootstrap of differences, Holm–Bonferroni, rank-biserial effect size, log–log exponent fits.
 
-The Wilcoxon signed-rank p-value needs SciPy, which becomes a dependency in Issue #4; it is
-added there. Everything here is NumPy only and deterministic for a given ``seed``.
+The Wilcoxon signed-rank p-value (Issue #4) uses SciPy, a dev/test dependency imported lazily
+by :func:`wilcoxon_p` only. Everything else is NumPy only and deterministic for a given ``seed``.
 """
 
 from __future__ import annotations
@@ -73,6 +73,18 @@ def rank_biserial(x: Sequence[float], y: Sequence[float]) -> float:
         i = j + 1
     total = ranks.sum()
     return float((ranks[d > 0].sum() - ranks[d < 0].sum()) / total)
+
+
+def wilcoxon_p(x: Sequence[float], y: Sequence[float]) -> float:
+    """Two-sided Wilcoxon signed-rank p-value of the paired differences ``x − y`` (zero
+    differences dropped, SciPy's ``wilcox`` convention); 1.0 when every difference is 0.
+    SciPy is a dev/test dependency (statistics only), imported lazily."""
+    from scipy.stats import wilcoxon  # type: ignore[import-untyped]
+
+    d = np.asarray(x, dtype=np.float64) - np.asarray(y, dtype=np.float64)
+    if not np.any(d != 0):
+        return 1.0
+    return float(wilcoxon(d, zero_method="wilcox", alternative="two-sided").pvalue)
 
 
 def holm(pvalues: Sequence[float]) -> list[float]:

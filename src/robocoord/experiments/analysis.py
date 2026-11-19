@@ -688,12 +688,28 @@ def summarize_e2(records: Sequence[Record]) -> str:
     return "\n".join(lines)
 
 
+def _issue4(name: str) -> Callable[[Sequence[Record]], str]:
+    def run(records: Sequence[Record]) -> str:
+        from robocoord.experiments import allocation_analysis as a
+
+        fn: Callable[[Sequence[Record]], str] = getattr(a, name)
+        return fn(records)
+
+    return run
+
+
 SUMMARIES: dict[str, Callable[[Sequence[Record]], str]] = {
     "e1a_planners_static": summarize_e1a,
     "e1b_neighbor_index": summarize_e1b,
     "e1b_memory": summarize_memory,
     "e1c_convergence": summarize_e1c,
     "e2_replanning": summarize_e2,
+    "e3a_assignment": _issue4("summarize_e3a"),
+    "e3b_priority": _issue4("summarize_e3b"),
+    "e5_prelim": _issue4("summarize_e5_prelim"),
+    "e5_prelim_reference": _issue4("summarize_e5_prelim"),
+    "e5_recovery": _issue4("summarize_e5_prelim"),
+    "e5_recovery_reference": _issue4("summarize_e5_prelim"),
 }
 
 
