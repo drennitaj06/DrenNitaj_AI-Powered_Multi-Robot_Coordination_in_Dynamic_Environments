@@ -73,6 +73,17 @@ Note on `target` for staying robots: a robot with $a_i = \textsf{stay}$ is liste
 
 ---
 
+**Implementation notes (Issue #2).**
+- Implemented in `src/robocoord/sim/conflicts.py` as designed (`detect_conflicts`, `arbitrate`, `physical_violations`).
+- The engine checks the physical-collision invariant after every step and raises `PhysicalCollisionError` on violation (never observed in tests).
+- The property test compares detection and arbitration against an independent naive O(N²) oracle on 600 generated situations (grids up to 6×6, up to 8 robots and 4 obstacles, unmasked random proposals, obstacle moves from the real move rule).
+- Obstacle move rule: proposals are also rejected if an earlier obstacle already claimed the cell in the same step. This makes the fixed processing order explicit; model §2 is updated.
+- **Path efficiency** is computed per completed *leg*: Σ optimal static distance at leg start / Σ moves made during the leg. Legs aborted by unassignment are excluded.
+- Metrics added during the final review: `blocked_goal_robot_steps` (robots holding a task whose goal is statically unreachable, evaluated on the map after the step's map events), per-100-robot-step rates for blocked moves and for each conflict kind. The `physical_collisions` counter is 0 by construction because the engine raises on any violation.
+- The scripted demo controller retries a statically feasible move that the arbiter cancelled, so scripted robots wait instead of skipping route steps. Symmetric head-on situations remain deadlocks for scripted robots, which is expected: no planner or learning is involved yet.
+
+---
+
 ## 2. Grid search
 
 ### 2.1 BFS distance field
@@ -88,6 +99,20 @@ Note on `target` for staying robots: a robot with $a_i = \textsf{stay}$ is liste
 **Caching.** The `DistanceOracle` caches fields keyed by `(target, grid.version)` with LRU eviction (default 256 fields, ≈ 4 MB for 64×64).
 
 **Tests.** Floyd–Warshall reference on small grids; unreachable components; cache invalidation after map events.
+
+**Implementation notes (Issue #2).**
+- `src/robocoord/core/distance.py`. Fields are cached read-only per `(target, grid.version)`.
+- `capped_distance` implements $\bar D$.
+- `connected_components` (also O(V)) is used by the map generators, which keep only the largest free component so that generated maps are connected (property-tested).
+- The Floyd–Warshall comparison is a Hypothesis property test (200 random grids up to 6×6).
+
+**Implementation notes (Project Issue #4, NFR-PERF-1 follow-up: O1, O2, symmetric reuse).**
+- *O1, flat BFS.* Cells are indexed $i = yW + x$ and the traversal runs on Python lists instead of per-cell NumPy indexing. The oracle caches, per grid version, the list of free 4-neighbours of every free cell, so a field costs one pass over that list. The output is the same `int32` `[y, x]` array. BFS distances do not depend on the expansion order of neighbours, so the fields are identical; the earlier implementation is kept as `bfs_distance_field_legacy`.
+- *O2, component reachability.* On the undirected 4-connected grid, $D_t(a,b) < \infty$ iff both cells are free and in the same connected component. `DistanceOracle.reachable` answers from component labels computed once per grid version ($O(V)$), not from a distance field per target. This serves task availability, the engine's per-step goal check, the planners' static-reachability guard, arrival sampling and scenario validation.
+- *Symmetric reuse.* $D_t(a,b) = D_t(b,a)$. `distance(a, b)` reuses a cached field to $a$ when none to $b$ is cached, and the auction benefits read the leg $D(p_j, d_j)$ as $D(d_j, p_j)$, from the field to $p_j$ that the terms $D(x_i, p_j)$ need anyway: one field per task instead of two on a cold cache.
+- *Invalidation.* Fields, neighbour lists and labels are all keyed by the grid version, which every map event changes, so nothing computed for an older map is ever used.
+- *Not done:* no work was moved into engine construction or out of the timed step, and O3 (incremental field repair after a single-cell map event) was not implemented; see `05` §B.6 NFR-PERF-1 for why.
+- *Equivalence tests* (`tests/unit/core/test_distance_equivalence.py`): flat BFS = legacy BFS for every target (blocked ones included) and flat labels = legacy labels on 80 random grids up to 9×9; fast and legacy oracles agree on fields, distances and reachability before and after random block/unblock sequences (50 grids); the E5 maps and task fields are identical under both. `DistanceOracle(grid, legacy=True)` / `legacy_distance()` reproduces the earlier behaviour exactly and exists only for these tests and the paired before/after benchmark.
 
 ### 2.2 Shared planning constraints and procedure
 
@@ -107,6 +132,14 @@ The two-stage procedure (constrained, then static fallback, then status mapping)
 - Dynamic blocking of a chokepoint triggers the stage-2 fallback with `degraded = true`.
 - Static blocking of the goal returns `unreachable`.
 - **Consistency test X-11:** on identical queries, A\* and RRT\* (generous budget) return the same status and the same `degraded` flag on ≥ 300 random queries with obstacles near or on goals and chokepoints.
+
+**Implementation notes (Issue #3).**
+- `planning/constraints.py`: `build_constraints(grid, start, goal, obstacles, params, extra_blocked)` is the only place where $Z_i$, $\hat Z_i$, $B_i$, $Q_i$ and $\omega_i$ are computed. `obstacles` maps each obstacle cell to its velocity. The sensing scan visits the $(2r_s+1)^2$ window or the obstacle list, whichever is smaller. `extra_blocked` carries the monitor's stall block list (T4); it is part of $B_i$, so the start and goal are removed from it and the stage-2 fallback drops it.
+- `planning/procedure.py`: `plan_with_procedure(planner, query, static_reachable=...)`. A start inside $S(t)$ is reported as `invalid_query`, like an out-of-bounds cell. It cannot occur in the simulator (map events are deferred while a cell is occupied), but random test queries can produce it. When $B_i = \varnothing$ the procedure skips stage 2, which would be identical, and reports `unreachable` directly. `degraded` is only ever `True` together with `ok`.
+- Planners declare `decides_reachability`. A\* (`True`) runs stage 1 and proves infeasibility itself. RRT\* (`False`) runs only after a BFS guard on the constrained grid, so its iteration budget is never spent on an unreachable goal (tested: `stats.iterations == 0`). The engine passes its cached `DistanceOracle.reachable` as the static guard.
+- `PlanConstraints` caches flat row-major views (`free_flat`, `penalised_flat`) once per query, O(V). Both planners read the same views.
+- Registry: `planning.make_planner("astar" | "rrtstar", **options)`. Unknown names or options raise `ConfigError` listing the valid choices.
+- **X-11 result:** on 318 random queries (random maps with obstacles on and near goals; rooms maps with an obstacle on a door chokepoint; empty sensed sets; goals inside $S(t)$), A\* and RRT\* returned identical `status` and `degraded` for every query (318/318). Outcome mix: 268 `ok`, 27 `ok` + degraded, 23 `unreachable` (`tests/unit/planning/test_consistency.py`). The generous RRT\* budget there uses `stop_on_first_solution`, because only the status matters.
 
 ### 2.3 A\* search
 
@@ -160,13 +193,19 @@ A*(start, goal, constraints):
 4. Determinism.
 5. Expanded nodes ≤ reachable cells.
 
+**Implementation notes (Issue #3).**
+- `planning/astar.py`. **Deviation from the table above:** the $g$, parent and closed arrays are Python lists and a `bytearray` instead of NumPy arrays. The hot loop indexes single elements, which is several times faster on lists, with the same O(1) access and O(V) initialisation. The asymptotic analysis is unchanged.
+- The canonical neighbour order (UP, DOWN, LEFT, RIGHT), the heap key `(f, −g, counter, node)` and lazy deletion are as specified. In open space the tie-breaking towards larger $g$ expands only the nodes on one optimal path (tested: 12 expansions for a 12-step query on an empty 7×7 grid).
+- **Oracle test result:** A\* matched an independent BFS on 600 unit-cost instances and an independent $O(V^2)$ array-scan Dijkstra on 600 proximity-weighted instances (1 200 random instances, grids up to 12×12, densities up to 45 %, random sensed obstacles, $\lambda \in \{0, 0.5, 2\}$). Every returned path was valid, its lattice cost equalled the reported cost, and expansions never exceeded the number of free cells.
+- **Measured behaviour (E1a, `05` §B.6):** 2 800/2 800 static queries solved, median 0.2–3.2 ms per query. Expansions grow sub-linearly in $V$ (exponents 0.49–0.84 by family; bound: expansions ≤ $V$). Expansions per free cell rise super-linearly with obstacle density (128×128: 0.013 at 10 % to 0.111 at 35 %). The worst case (whole component explored) occurs only for unreachable goals, which E1a does not contain; the procedure tests cover it.
+
 ---
 
 ## 3. RRT\* (continuous sampling-based planner)
 
 ### 3.1 Purpose, input, output
 
-**Purpose.** The second selectable planner: asymptotically optimal planning in the continuous plane over the occupancy map (model §5.2). **Reference.** Karaman & Frazzoli, *Sampling-based algorithms for optimal motion planning*, IJRR 2011.
+**Purpose.** The second selectable planner: the RRT\* algorithm (designed for asymptotically optimal planning) in the continuous plane over the occupancy map (model §5.2). §3.4–3.5 state what the implemented radius does and does not establish. **Reference.** Karaman & Frazzoli, *Sampling-based algorithms for optimal motion planning*, IJRR 2011.
 
 **Input.** Start and goal cell, `PlanConstraints`, RNG, and the configuration:
 - `max_iterations` $n_{\max}$;
@@ -204,6 +243,8 @@ RRT\* issues one nearest-neighbour query, one radius query and one insertion per
 
 **Discretisation (polyline → executable cell path).** Walk each segment's supercover in order. The walk advances one axis at a time, so consecutive cells are 4-adjacent. At an exact corner, both side cells were checked free and the x-step side cell is inserted (deterministic). Consecutive duplicates are removed. Every produced cell was collision-checked, so the cell path is valid for the snapshot (Guaranteed).
 
+**Loop removal (Issue #3 review, V-6).** Joining segment traversals can revisit a cell, typically as an A→B→A detour around a polyline vertex near a cell corner. Before the fix this happened in 8 of 176 sampled RRT\* paths on 16–32 maps (about 2 wasted steps each). In the E1a re-run it affected 18–25 % of all successful RRT\* paths (more on large maps), saving 2.9–3.3 steps on average and at most 14 (`05` §B.6, E1a). The executable path therefore goes through `remove_loops`: when a cell is visited again, the cells between the two visits are dropped. The result keeps the endpoints, uses only cells of the original path (all collision-checked), keeps 4-adjacency (the join point is the same cell), visits each cell once, and has a lattice cost $\sum\kappa$ that cannot increase. It is therefore valid under the same rules (Guaranteed; property test plus a regression test on a real looping query, 18 → 16 steps). The planner's reported cost and `waypoints` still describe the polyline, which is unchanged.
+
 ### 3.4 Pseudocode
 
 ```text
@@ -231,14 +272,20 @@ RRT*(q_start, goal_cell, constraints, n_max):          # called by the shared pr
 
 `c(·,·)` is the weighted segment cost of §3.3. Ties in argmin are broken by node index. The tree is stored in parallel NumPy arrays (`xy`, `parent`, `cost`, geometric growth) with per-node child lists, so reparenting costs $O(\deg)$ for removal from the old parent's list.
 
-**Radius constant.** For $d = 2$, Karaman & Frazzoli give the condition $\gamma > \gamma^\* = 2(1 + 1/d)^{1/d}\big(\mu(X_{\text{free}})/\zeta_d\big)^{1/d}$, with $\zeta_2 = \pi$ and $\mu(X_{\text{free}})$ = free area in cells. Solovey et al. (*Revisiting the asymptotic optimality of RRT\**, ICRA 2020) identified a gap in the original proof and derived a corrected, larger constant. We use $\gamma = \gamma_f \gamma^\*$ with $\gamma_f \ge 1$ (default 1.5), and claim asymptotic optimality only under that corrected condition.
+**Connection radius: what is implemented and what it does (not) establish.**
+- **Implemented: the Karaman–Frazzoli radius.** $r_n = \min\big(\gamma (\ln n / n)^{1/d}, \eta\big)$ with exponent $1/d = 1/2$, $\gamma = \gamma_f \gamma^\*$, $\gamma_f = 1.5$ (`RRTStarConfig.gamma_factor`, must be ≥ 1), and $\gamma^\* = 2(1 + 1/d)^{1/d}\big(\mu(X_{\text{free}})/\zeta_d\big)^{1/d}$, with $\zeta_2 = \pi$ and $\mu(X_{\text{free}})$ = free area in cells. This is the radius of Karaman & Frazzoli (IJRR 2011). Their Theorem 38 states almost-sure convergence to the optimum for a radius of the form $\gamma^{KF}(\log n / n)^{1/d}$ with $\gamma^{KF}$ above their threshold.
+- **The correction (Solovey, Janson, Schmerling, Frazzoli, Pavone, *Revisiting the Asymptotic Optimality of RRT\**, arXiv:1909.09688v2, to appear in ICRA 2020).** They identify a logical gap in the original optimality proof. Their Theorem 1 proves asymptotic optimality for the radius $r(n) = \gamma(\log n / n)^{1/(d+1)}$, i.e. with the **exponent reduced from $1/d$ to $1/(d+1)$** (a larger radius for large $n$), and a constant $\gamma \ge (2+\theta)\big(\frac{(1+\varepsilon/4)\,c^\*}{(d+1)\,\theta\,(1-\mu)}\cdot\frac{|F|}{\zeta_d}\big)^{1/(d+1)}$, $\theta \in (0, 1/4)$, $\mu, \varepsilon \in (0, 1)$. The conclusion is $\lim_{n\to\infty}\Pr[c(\sigma_n) \le (1+\varepsilon)c^\*] = 1$. Their algorithm also uses the steering step $\eta$ and the near radius $\min\{r(|V|), \eta\}$. The correction is to the **exponent**, not to the constant; an earlier version of this document wrongly described it as "a corrected, larger constant".
+- **Consequence.** The implemented exponent $1/2$ is *not* the corrected exponent $1/3$ (for $d = 2$). For large $n$, $\gamma(\ln n/n)^{1/2}$ falls below every $\gamma'(\ln n/n)^{1/3}$, whatever the constants, so no choice of $\gamma_f$ satisfies Solovey et al.'s condition. **The implemented radius therefore does not establish the corrected asymptotic-optimality guarantee.** Solovey et al. show that the original proof is incomplete; that is not a proof that the $1/d$ radius fails. Asymptotic optimality of the implemented planner is therefore **not claimed** (model §12, G7). The radius was kept as approved, without a new option, and E1c reports its measured convergence.
 
 ### 3.5 Correctness
 
 - **Validity (Guaranteed):** every tree edge passed `FREE`, and discretisation preserves freeness and 4-adjacency.
 - **Monotone best cost (Guaranteed):** nodes are never removed and rewiring only lowers costs, so the best goal cost is non-increasing over iterations.
 - **Tree-cost invariant (Guaranteed):** after every iteration, $\text{cost}[q] = \text{cost}[\text{parent}(q)] + c(\text{parent}(q), q)$ for all non-root $q$. Eager propagation (`PROPAGATE`) maintains it. Choose-parent and rewire decisions read exact costs, including for near nodes that are descendants of an earlier rewired node in the same iteration.
-- **Asymptotic optimality (Conditional):** holds for Euclidean path length ($Q_i = \varnothing$ or $\lambda_{\text{prox}} = 0$) as $n \to \infty$ under the corrected radius condition. For the weighted cost ($\lambda_{\text{prox}} > 0$) the density is bounded, additive and monotone but discontinuous at zone boundaries, so we **do not claim** asymptotic optimality there.
+- **Asymptotic optimality (Not claimed for the implemented radius):**
+  - The implementation uses the Karaman–Frazzoli radius, exponent $1/d$ (§3.4). Karaman & Frazzoli's optimality theorem for this radius rests on a proof that Solovey et al. (2020) showed to have a logical gap. The corrected proof (Solovey et al., Theorem 1) needs the exponent $1/(d+1)$, which is not implemented. So the corrected guarantee is **not established** here, for any $\gamma_f$.
+  - It would also be restricted to the Euclidean cost ($Q_i = \varnothing$ or $\lambda_{\text{prox}} = 0$). For the weighted cost ($\lambda_{\text{prox}} > 0$) the density is bounded, additive and monotone but discontinuous at zone boundaries, so no optimality claim is made there either.
+  - What *is* reported is empirical: the measured convergence of the best cost on open maps (E1c, `05` §B.6). That evidence describes finite budgets and proves no asymptotic property.
 - **Completeness:** with a finite budget there is **no guarantee**. Reachability is decided exactly beforehand by the BFS guard (Lemma 5.1), so `budget_exhausted` always means "path exists, not found in budget".
 
 ### 3.6 Complexity
@@ -250,8 +297,8 @@ Let $n$ = tree size at the current iteration ($n \le$ iterations), $k$ = $|Q|$ (
 | Operation | `BruteForceIndex` | `LogKDTreeIndex` |
 |---|---|---|
 | Insert | $O(1)$ amortised (array doubling) | **$O(\log^2 n)$ amortised**: each point is rebuilt into larger slots at most $\lfloor\log_2 n\rfloor$ times, at $O(\log n)$ per point per rebuild. **$O(n \log n)$ worst case** for a single insertion that triggers a full rebuild. |
-| Nearest neighbour | $\Theta(n)$ worst and expected | **$O(n)$ worst case** (a k-d tree has no sublinear worst-case bound for nearest neighbour). **Expected $O(\log^2 n)$** under the random-point model of Friedman, Bentley & Finkel (1977): expected $O(\log m)$ per tree, $O(\log n)$ trees. This is assumption **R**; RRT\* node sets are not i.i.d., so R is a modelling assumption checked empirically. |
-| Radius query | $\Theta(n)$ worst and expected | **$O(\sqrt{n} + k')$ worst case**: for a balanced 2-d tree with alternating median splits, an orthogonal range query costs $O(\sqrt{m} + \text{output})$ (Lee & Wong, 1977; de Berg et al., *Computational Geometry*, Lemma 5.5). A disk query visits a subset of the nodes visited by its bounding-square query. Summing over slots, $\sum_i O(\sqrt{2^i}) = O(\sqrt{n})$. |
+| Nearest neighbour | $\Theta(n)$ worst and expected | **$O(n)$ worst case** (a k-d tree has no sublinear worst-case bound for nearest neighbour). **Expected $O(\log^2 n)$** under a random-point model in the spirit of Friedman, Bentley & Finkel (ACM TOMS 3(3):209–226, 1977): expected $O(\log m)$ per tree, $O(\log n)$ trees. This is assumption **R**; RRT\* node sets are not i.i.d., so R is a modelling assumption checked empirically. *Source status (`verification-log.md` V-6): the paper's own text could not be read. Its abstract, as summarised by a secondary index, says the number of records examined is independent of file size and descent time is proportional to $\log N$. Its tree construction and probabilistic assumptions were not verified, nor whether its analysis covers our alternating-axis trees. R is therefore stated as an assumption, not as a cited theorem about this tree.* |
+| Radius query | $\Theta(n)$ worst and expected | **$O(\sqrt{n} + k')$ worst case**: for a balanced 2-d tree with alternating median splits, an orthogonal range query costs $O(\sqrt{m} + \text{output})$, the standard kd-tree bound (de Berg et al., *Computational Geometry*, Ch. 5; Lee & Wong, Acta Informatica 9:23–29, 1977). The implemented query traverses exactly the nodes whose box meets the bounding square, so its node count is that of the square query, and the disk is applied as a filter. Summing over slots, $\sum_i O(\sqrt{2^i}) = O(\sqrt{n})$. *Source status (V-6): the bound with output term, $O(n)$ storage and $O(n\log n)$ construction is confirmed by several university lecture notes based on de Berg et al. The textbook's lemma number and the exact statement in Lee & Wong (paywalled) were not verified. Constant factors from our leaf buckets ($b_\ell \le 8$) are not covered by the cited statement. The usual recurrence argument (quoted in those notes as $Q(n) = 2 + 2Q(n/4)$) relies only on alternating median splits, which our construction uses. That transfer is our own reasoning, not a cited statement.* |
 | Collision checks and segment costs | $O((k+1)(\ell+1))$ | same |
 | Cost propagation | $O(s)$, with $s \le k \cdot n$ | same |
 
@@ -292,6 +339,31 @@ start = goal (immediate success); start inside the goal region; goal unreachable
 6. Monotone best-cost trace; tree-cost invariant after every iteration (debug mode); determinism per seed.
 7. Work counters are consistent: $k \le n$, $s \ge$ number of rewires.
 8. Convergence sanity on an empty map: the Euclidean length approaches the straight-line distance as $n$ grows (statistical test over seeds, documented tolerance).
+
+**Implementation notes (Issue #3).**
+- Modules: `planning/geometry.py` (traversal, `segment_cost`, `discretise`), `planning/neighbors.py` (`NeighborIndex`, `BruteForceIndex`), `planning/kdtree.py` (`StaticKDTree`, `LogKDTreeIndex`), `planning/rrtstar.py` (`RRTStarConfig`, `RRTStarPlanner`).
+- **Supercover rule, made precise.** The check set is every cell whose *closed* square meets the segment. Beyond the interior cells of the traversal this includes: all four cells at an exact corner crossing; the cells on both sides of a segment that lies on a grid line; and the cells touching an endpoint that lies on a cell boundary. Two crossings closer than $10^{-9}$ in the segment parameter count as a corner. This can only add cells, so it is conservative and keeps Lemma 5.1's "accepted ⇒ 4-connected free chain" direction. Tested against an exact rational-arithmetic (Liang–Barsky) oracle: exact equality on lattice and half-lattice endpoints (corners, grid-line segments, boundary endpoints); on random float segments, equality except extra cells within $10^{-7}$ of the segment (the tolerance).
+- **Canonical direction.** Every segment is evaluated from its lexicographically smaller endpoint, so `segment_cost(p, q)` and `segment_cost(q, p)` are bitwise equal. Edge costs are therefore computed once per candidate and reused for choose-parent and rewire, and the tree-cost invariant is checked with **exact** equality (`check_invariants`).
+- **Propagation.** Instead of subtracting $\delta$ from every descendant, `PROPAGATE` recomputes `cost[u] = cost[parent(u)] + c(parent(u), u)` top-down over the rewired subtree, from stored edge costs. The work is the same $O(s)$, and the invariant holds exactly in floating point instead of accumulating rounding drift.
+- **Steer step $\eta = 2.0$ cells** (configurable). The documents left $\eta$ open. It was fixed by a small pilot on micro-benchmark seeds 39000–39009 (32×32 maps; open, 20 %, 30 % density and rooms; 2 000 iterations; $\eta \in \{1, 1.5, 2, 3\}$). $\eta = 2$ gave the best balance of success within budget (39/40 queries) and path quality. $\eta = 1$ lost success on 30 % maps (7/10); $\eta = 3$ lost success on 30 % and rooms maps (7/10, 8/10). Sampling: goal bias $p_g = 0.1$ (uniform in the goal cell), otherwise uniform in $[0,W)\times[0,H)$; $\gamma_f = 1.5$; $\mu(X_{\text{free}})$ = free cells w.r.t. $S(t) \cup B_i$.
+- **Consequence for the near radius.** With $\eta = 2$, $r_n = \min(\gamma\sqrt{\ln n / n}, \eta)$ equals $\eta$ until $\gamma\sqrt{\ln n/n} < 2$, i.e. until $n \approx 10\,150$ on 32×32, $n \approx 47\,400$ on 64×64 and $n \approx 216\,000$ on 128×128 open maps. Below that, the expected near-set size $n\pi\eta^2/\mu$ grows **linearly** in $n$. Once the radius shrinks, $k \approx n\pi r_n^2/\mu = 6\gamma_f^2\ln n \approx 13.5\ln n$ under uniform density. Assumption U therefore describes the asymptotic regime only; E1 measures which regime the online budgets fall in.
+- RRT\* runs its full iteration budget (anytime). `stop_on_first_solution` (off by default) is used only by the X-11 consistency test. `time_limit_s` is the per-run wall-clock cap of the experiments.
+- **Index invariants and oracle tests:** k-d tree and brute force returned identical nearest and radius results on Hypothesis-generated insert/query sequences, including snapped coordinates with many exact ties and duplicates, and identical $k'$ totals. Slot sizes equal the binary representation of $n$. Every point is in exactly one slot. Static trees satisfy the alternating axes, the median property, tight bounding boxes, leaf size and depth ≤ $\lceil\log_2(m/b_\ell)\rceil + 1$. Because both indexes answer identically, RRT\* builds the **same tree** with either index for a given seed. This is tested, and E1b confirms it on every query.
+- **Default neighbour index: `brute` (decided from E1b, `05` §B.6).** At every measured budget (1 000–10 000 iterations; 64×64 open and 20 % maps) the brute-force index was faster, by a factor of 1.2–2.1 in median time across the original run and the counter-corrected re-run, and used about 25 % less memory. The k-d tree evaluates 7–130× fewer distances per nearest-neighbour query, examines only 16–54 tree nodes, and has the lower time exponent, but its pure-Python traversal costs more than one vectorised NumPy scan of ≤ 10 000 points. `kdtree` remains implemented, tested and selectable. **Every complexity statement for the default configuration therefore refers to `BruteForceIndex`.**
+- **Work counters (definitions in `planning/kdtree.py`, pinned by regression tests):**
+  - `nn_visited`: points whose distance a nearest query evaluated.
+  - `nn_nodes`: tree nodes examined, including internal nodes and nodes pruned by the box test.
+  - `range_nodes`: nodes a radius query expanded (box intersects the query square); `range_nodes_tested`: nodes examined, including pruned ones.
+  - `rebuild_points`: points placed into newly built static trees (per insertion the new slot size, inserted point included).
+  - `rebuild_work`: points processed by those builds, Σ subtree sizes over all built nodes. This is the quantity the O(m log m) build and amortised O(log² n) insertion bounds are about.
+  - The node and work counters were added in the Issue #3 review. Before that, `nn_visited` and `range_nodes` were the only tree counters, and they under-counted the work of the analysis (`05` §B.6, E1b review correction).
+- **Measured behaviour vs §3.6 (E1b, counter-corrected re-run):** k-d nearest-neighbour **nodes examined** grow with exponent 0.32–0.35 in $n$. Over $n \in [64, 10^4]$ this matches the growth of $\log^2 n$ (local exponent ≈ 0.32). A direct fit $a(\ln n)^c$ gives $c = 2.14$ (open) and $2.29$ (d20), with lower residuals than the power law (`05` §B.6). This is consistent with R, without proving an asymptotic bound. The worst case $O(n)$ is not approached. Points evaluated grow with only 0.10–0.13. Range-query nodes (examined 0.51–0.76, expanded 0.57–0.81) stay within $O(\sqrt n + k')$. Rebuild work per insertion grows with exponent 0.17–0.19 (13–37 points), within amortised $O(\log^2 n)$. **Assumption U does not hold at online budgets:** $k$ and $k'$ grow linearly in $n$ (exponents 1.0–1.2), because $r_n = \eta$ throughout. Propagation work per iteration grows super-linearly (exponent 1.3–1.4), still within $s \le kn$. Total time grows with exponent 1.5–1.8 in $N_{\text{it}}$, within the unconditional $O(N_{\text{it}}^2\eta + N_{\text{it}}^3)$. Memory is linear (exponent 1.03–1.04). The conditional "under U" rows of the table do not apply to the measured range; this is reported, not hidden.
+- **Measured behaviour (E1a, E1c):**
+  - Success within budget is high on open maps (100 % at every size and budget) and falls sharply with density, size and corridor structure. At 128×128 with 5 000 iterations: 99 % (10 %), 69 % (20 %), 9 % (30 %), 3 % (35 %), 20 % (rooms), 64 % (warehouse). This is the finite-budget behaviour that G8 does not claim to avoid.
+  - When it succeeds with enough iterations on open or small maps, its continuous *reference polyline* is shorter than A\*'s lattice path in Euclidean length (e.g. 1.01× vs 1.45× the straight-line bound at 16×16 open), and its discretised path is step-optimal or nearly so. Robots execute the discretised 4-connected path, which is never shorter than A\*'s. The shorter polyline is therefore not an execution-efficiency advantage (`05` §B.6, E1a).
+  - E1c, open maps: best cost within 0.15 % of the exact optimum after 20 000 iterations (mean). This is finite-budget empirical convergence. It does not establish asymptotic optimality, which is not claimed for the implemented radius (§3.5, G7).
+- **No $O(n\log n)$ claim** is made or supported (G9): the measured total-time exponents in $N_{\text{it}}$ are 1.5–1.8.
+- RRT\* tests: validity, monotone best-cost trace, exact tree-cost invariant after every iteration (60 random solvable queries, both indexes, $\eta \in \{0.7, 1.5, 3\}$); determinism per seed; counter consistency ($k \le n$, $k \le k'$, $\sum s \ge$ rewires, trace sums equal totals); convergence sanity on an empty 16×16 map (mean cost ratio at 900 iterations < at 150 and ≤ 1.03, never below the exact optimum).
 
 ---
 
@@ -350,6 +422,43 @@ AUCTION(A, θ = 5):
 
 **Edge cases.** No eligible robots or no available tasks (no-op). $n \ne m$. All pairs infeasible (empty mapping). Ties (deterministic). $k = 1$. Large $C$: `int64` range validated.
 
+**Implementation notes (Issue #4, stage 1: benefits).**
+- `allocation/benefits.py`: `build_problem(robots, tasks, t, distance, BenefitConfig)` returns an `AllocationProblem`. It holds the real-valued `cost` ($c_{ij}$), `priority_value` ($\kappa\tilde w_j$), `value` ($\kappa\tilde w_j - c_{ij} + h\mathbb 1[\tau_i = j]$, $-\infty$ if infeasible) and the padded $k\times k$ int64 `matrix` used by the allocators.
+- Defaults are those of model §11: $\kappa = 10$, $h = 2$, $\alpha = 0.01$, $s = 100$. $w(\pi) = 2^{\pi-1}$, and the age is clamped at 0 before release. $h$ must be an integer.
+- **Integer form (a refinement of model §8, same formulas):**
+  - Every term is multiplied by $s$. The integer benefit of a feasible pair is $A_{ij} = M_{\text{int}} + P_j - s\,c_{ij} + s\,h\,\mathbb 1[\tau_i = j]$, with the priority term $P_j = \mathrm{round}(s\kappa\tilde w_j)$, the **distance term** $s\,c_{ij} = s\,(D(x_i,p_j) + D(p_j,d_j))$ and the **hysteresis term** $s\,h$.
+  - $c_{ij}$ (BFS distances) and $h$ are integers, so $s c_{ij}$ and $s h$ are exact. The only rounded quantity is $P_j$. Each integer benefit therefore differs from $s\,a_{ij}$ by at most $1/2$, i.e. by at most $1/(2s)$ in original units (model §8).
+  - The offset uses the model's formula on the **scaled integer components**: $M_{\text{int}} = 1 + k(B_{\text{int}} + C_{\max})$ with $B_{\text{int}} = \max_j P_j + s h$ and $C_{\max} = s\,c_{\max}$. The model's maximum-cardinality argument then holds exactly in integers for every $\kappa$ and $k$.
+  - Scaling a real-valued $M$ and rounding afterwards is not guaranteed to keep the strict inequality in general: the rounding error over a matching can reach about $k$ integer units, against a margin of $s(1+B)$. With the defaults ($B \ge \kappa = 10$) this would only fail for $k$ above about 2 000, and with $\kappa = 0$ nothing is rounded. So this is a robustness refinement, not a change of the model.
+- **Tests** (`tests/unit/allocation/test_benefits.py`):
+  - A hand-computed instance: every cost, value, offset and matrix entry.
+  - Infeasible pairs (unreachable pickup; pickup → drop-off unreachable) are 0, every feasible entry is ≥ 1, and padding rows and columns are 0.
+  - 300 random instances checked against independent brute force (all partial matchings; all $k!$ perfect assignments, $k \le 5$): the optimal padded assignment has maximum feasible cardinality, maximises the integer core among maximum-cardinality matchings, and equals the best partial matching in value (padding equivalence).
+  - 300 instances for the rounding bound: $|{\rm core} - s\,a| \le 1/2$, identical down each task column because only $P_j$ is rounded.
+  - 60 large instances ($k \le 120$, including the $\kappa = 0$ and $h = 0$ ablations) for the hardest margin inequality $k\cdot\min > (k-1)\cdot\max$, which implies $(q+1)\min > q\max$ for every $q \le k-1$.
+  - Input validation and the int64 overflow guard.
+
+**Implementation notes (Issue #4, stage 2: auction).**
+- `allocation/auction.py`: `solve(matrix, scaling, epsilon, theta, time_limit_s, max_bids)` solves the square integer problem; `AuctionAllocator` (`name = "auction"`) applies it to an `AllocationProblem` and drops dummy and infeasible pairs. `allocation/base.py` holds the `Allocator` protocol, `SolveStats`, `SquareSolution` and `AllocationResult`.
+- **Exact integer arithmetic.** Benefits, prices and ε are all int64; no floating-point price is ever compared.
+  - *ε-scaling (production).* The benefits are multiplied by $k+1$. An integer ε of 1 then equals $\varepsilon = 1/(k+1) < 1/k$ in original units, which is the pseudocode's stopping condition: the final assignment is **optimal** for the integer benefits (Guaranteed, by the optimality bound above). The schedule is $\varepsilon_0 = \max(\lfloor C'/\theta \rfloor, 1)$, then $\varepsilon \leftarrow \max(\lfloor \varepsilon/\theta \rfloor, 1)$, prices kept between phases, stopping after the phase with integer ε = 1 ($C'$ = largest scaled benefit, θ = 5).
+  - *Fixed ε (E3a only).* One phase from zero prices with an integer ε ≥ 1 in original units: $V \ge \mathrm{OPT} - k\varepsilon$ (Guaranteed). For $\varepsilon = 1$ this is the additive bound $V \ge \mathrm{OPT} - k$. No relative-error guarantee is claimed; E3a reports the measured gap against the Hungarian optimum.
+- **Bid bound for fixed ε (derived here, Guaranteed).** Non-negative integer matrix with largest entry $C$, zero initial prices.
+  - While some object $j_0$ has received no bid, $q_{j_0} = 0$ and every bidder values it at $a_{ij_0} \ge 0$.
+  - A bid on $j^\* \ne j_0$ sets $q_{j^\*} = a_{ij^\*} - w^\* + \varepsilon \le C - 0 + \varepsilon$, since $w^\* \ge a_{ij_0} - q_{j_0} \ge 0$.
+  - Each bid raises the price by at least ε, so each object receives at most $\lfloor C/\varepsilon \rfloor + 1$ bids before every object has been bid on.
+  - In a square problem the phase ends as soon as every object has been bid on (each then has an owner). So the only bid not covered above is the single final bid on the last unbid object. Total: at most $k(\lfloor C/\varepsilon \rfloor + 1) + 1$ bids.
+  - This sharpens the earlier $2C + \varepsilon$ price bound for the non-negative case. Warm-started ε-scaling phases are not covered by it; for those the Bertsekas & Eckstein (1988) analysis is cited, not re-derived.
+- **Integer optimum vs real-valued value.** The auction is exact on the *integer* problem. Two integer-optimal matchings can still differ in original units, because only $P_j$ is rounded. With $q$ pairs, each within $1/(2s)$, the integer optimum $S$ and the real-valued optimum $S^\*$ (both of maximum cardinality) satisfy $\mathrm{real}(S) \ge \mathrm{real}(S^\*) - q/s$. This occurred in development (92.0 vs 92.1 on one instance), so the tests compare integer totals exactly and real values within $q/s$.
+- **Time and bid caps.** `time_limit_s` and `max_bids` are checked every 256 bids, counted **cumulatively** across phases, and at every phase boundary. On a cap the solve returns no assignment (`timed_out = True`); what the coordinator does then is part of the allocation policy (stage 4).
+  - The first version counted bids per phase. The timeout test showed that an ε-scaling solve with many short phases (k = 60: 11 phases, about 108 bids each) then never reached a check. Fixed before any results were recorded.
+- **Tests** (`tests/unit/allocation/test_auction.py`; oracle `scipy.optimize.linear_sum_assignment`, independent of the auction):
+  - 200 random square matrices, $k \in [1, 60]$, $C \in \{1, 3, 10, 10^3, 10^6\}$ (small $C$ gives many ties), 30 % with zero blocks like padding: ε-scaling value equals the Hungarian optimum; final ε < 1/k; ε-CS holds at termination.
+  - 200 rectangular problems with infeasible pairs through `build_problem` (up to 12 × 12): integer total equals Hungarian's; same, maximum cardinality; real value within $q/s$; only feasible pairs; no robot or task twice.
+  - 200 matrices × ε ∈ {1, 2, 7, 50, 1000} without scaling: $\mathrm{OPT} - k\varepsilon \le V \le \mathrm{OPT}$, ε-CS, the bid bound above, one phase.
+  - The $k\varepsilon$ bound is not vacuous: a strictly suboptimal fixed-ε result is found.
+  - Edge cases ($k = 0$, $k = 1$, all-equal ties, negative entries), determinism (same assignment and bid count), validation (non-square, θ < 2, ε < 1, int64 overflow, unknown mode), both caps, and a hand-built corridor instance.
+
 **Tests.**
 1. **Oracle property test:** random integer matrices, $k \in [1, 60]$, rectangular and with infeasible pairs. Total benefit equals the `scipy.optimize.linear_sum_assignment` optimum, and cardinality is maximum.
 2. ε-CS holds at termination.
@@ -367,12 +476,76 @@ AUCTION(A, θ = 5):
 
 **Tests.** Optimality on instances where greedy is optimal. A constructed counter-example. Value ≥ ½ optimum on random instances (property test against the Hungarian oracle).
 
+**Implementation notes (Issue #4, stage 3: sequential auction).**
+- `allocation/sequential.py`: `solve(matrix)` on the same padded integer matrix as the auction (positive entry = feasible pair; 0 = dummy or infeasible); `SequentialAllocator` (`name = "sequential"`).
+- **Tie rule (documented here; the spec leaves it open).** A robot bids for its lowest-index best task; among equal bids the lowest robot index wins.
+- **Implementation.** The round winner is always the remaining feasible pair that comes first in the order $(-A_{ij}, i, j)$. So one sort of the feasible pairs and one scan that keeps each pair whose robot and task are both still free reproduce the round-by-round outcome exactly. Time $O(F \log F)$ for $F \le nm$ feasible pairs (the $O(nm\log m)$ variant above, up to the log factor); memory $O(F)$. Unmatched rows and columns are paired in index order to give a full permutation. Each such pair has benefit 0 (otherwise the matching would not be maximal), so the value is unchanged and the pairs are dropped as dummy or infeasible.
+- **What the ½ guarantee is about.** It holds for the objective the allocator is given: the non-negative integer matrix, including the offset $M_{\text{int}}$: $2V \ge \mathrm{OPT}$ (Guaranteed). Each optimal pair loses, or ties under the rule, to a greedy pair sharing an endpoint, and each greedy pair shares an endpoint with at most two optimal pairs.
+  - It does **not** transfer to original units: $\kappa\tilde w_j - c_{ij} + h\mathbb 1$ can be negative.
+  - Constructed instance (8 × 1 corridor, κ = 4): greedy $-1$ vs optimum $+1$ in original units, while the integer bound holds. With the default κ = 10 the same instance gives 11 vs 13.
+  - On benefit problems the offset gives a much stronger bound: $V \ge \frac{k-1}{k+1}\,\mathrm{OPT}$. Like the ½ bound, it is about the **offset-inclusive integer objective** $\sum A_{ij}$, *not* the original unshifted benefits $\kappa\tilde w_j - c_{ij} + h\mathbb 1$. It mostly measures $M$, so it says almost nothing about allocation quality. E3 therefore reports the gap in original units, not this ratio. Statement and proof below.
+- **The connected-component assumption (CC)**, on which the maximum-cardinality result and the $(k-1)/(k+1)$ ratio rest.
+  - *Statement.* For every robot $i$ and task $j$ of a problem, $(i, j)$ is feasible **iff** robot $i$'s cell and pickup $p_j$ lie in the same connected component of the free static grid $G(t)$, and $d_j$ is reachable from $p_j$.
+  - *Why it holds in this code.* `build_problem` declares a pair feasible iff $D(x_i, p_j) < \infty$ and $D(p_j, d_j) < \infty$, with no other filter (no capacities, time windows or robot–task compatibility). `DistanceOracle` computes $D$ by BFS on the undirected 4-connected grid of static obstacles, so "$D < \infty$" is symmetric and transitive: it is "same connected component". A robot on a blocked cell, which map events do not create, would form a component of its own with no feasible pair, which is still consistent with CC. Dynamic obstacles never enter $D$ (model §4).
+  - *Consequence.* The feasible pairs form one complete bipartite block $R_c \times J_c$ per component $c$, and blocks share no robot or task.
+  - *When it would fail.* Any feasibility rule that depends on more than (robot component, task): directed or one-way aisles, distances that include dynamic obstacles or other robots, capacities, battery, robot–task compatibility. Only the general ½ guarantees would then remain.
+- **Cardinality (refines the paragraph above).** On a general matrix, greedy is a *maximal* matching, so it gets at least half the maximum cardinality (Guaranteed). It can get exactly half: $[[2,2],[2,0]]$ gives one pair against two. Under CC, greedy always reaches **maximum** cardinality (Guaranteed under CC; tested on 200 benefit problems against Hungarian).
+  - *Proof.* Greedy is maximal. If after greedy some block $c$ still had both a free robot and a free task, that pair would be feasible (CC) with positive benefit, contradicting maximality. So greedy matches $\min(|R_c|, |J_c|)$ in every block, and no matching can do better, because blocks share no endpoints.
+  - On benefit problems the only shortfall of greedy is therefore in value.
+- **The $(k-1)/(k+1)$ ratio on the integer objective (Guaranteed under the assumptions; tested on 200 benefit problems).**
+  - *Assumptions.*
+    - (i) The objective is the padded integer matrix $A$ of `build_problem`: feasible entries $A_{ij} = M_{\text{int}} + \mathrm{core}_{ij}$ with $\mathrm{core}_{ij} = P_j - s\,c_{ij} + s\,h\,\mathbb 1[\tau_i = j]$ and $M_{\text{int}} = 1 + k(B_{\text{int}} + C_{\max})$; dummy and infeasible entries are 0.
+    - (ii) $\kappa \ge 0$ and $h \ge 0$ (enforced by `BenefitConfig`), so $0 \le P_j \le \max_j P_j$, and therefore $-C_{\max} \le \mathrm{core}_{ij} \le B_{\text{int}}$, with $B_{\text{int}} = \max_j P_j + s h$ and $C_{\max} = s\,c_{\max}$.
+    - (iii) CC holds, so greedy $G$ and an optimum $O$ have the same cardinality $q$.
+    - (iv) $k \ge 1$.
+  - *Proof.*
+    - If $q = 0$, both values are 0 and the bound holds trivially.
+    - Otherwise $V(G) \ge q(M_{\text{int}} - C_{\max})$ and $\mathrm{OPT} \le q(M_{\text{int}} + B_{\text{int}})$, and $\mathrm{OPT} > 0$.
+    - Then $(k+1)V(G) - (k-1)\mathrm{OPT} \ge q\big[2M_{\text{int}} - (k+1)C_{\max} - (k-1)B_{\text{int}}\big] = q\big[2 + (k+1)B_{\text{int}} + (k-1)C_{\max}\big] \ge 0$, substituting $M_{\text{int}} = 1 + kB_{\text{int}} + kC_{\max}$. ∎
+  - *What it does not say.*
+    - Nothing about the original benefits $\kappa\tilde w_j - c_{ij} + h\mathbb 1$, which have no offset and can be negative. On the κ = 4 corridor instance, greedy scores $-1$ against the optimum's $+1$: no ratio bound exists there.
+    - The factor comes from $M_{\text{int}}$ dominating every core term, not from greedy being good.
+    - Without CC, only the general ½ bound holds.
+  - The policy's keep-current tie-break (§4.3 notes) runs greedy on $A' = (k+1)A + E$. Sorting by $A'$ is sorting by $A$ with ties broken towards current pairs, so this is greedy on $A$ under another tie rule. The ½ proof holds for any tie rule, maximality is unaffected, and so both bounds still hold for $A$.
+- **Tests** (`tests/unit/allocation/test_sequential.py`; oracles independent of the module):
+  - A literal round-by-round simulation of the rule above, used as the reference for 200 random matrices ($k \le 40$, tie-heavy small $C$, zero blocks): same pairs; value and round count match; $2V \ge \mathrm{OPT}$ and $V \le \mathrm{OPT}$ against Hungarian; maximality; cardinality ≥ ½ maximum.
+    - Mutation check (scratchpad, not in the suite): flipping either tie rule changes the outcome on 99/200 and 102/200 of these instances, so the reference detects such errors.
+  - 200 rectangular benefit problems through `build_problem`: integer ½ bound against Hungarian; maximum cardinality; only feasible pairs; reported value equals `matching_value`.
+  - Greedy is optimal, checked by enumeration or Hungarian, on additive matrices $A_{ij} = u_i + v_j$ (every perfect matching has equal value) and on single-robot problems, plus a separated corridor instance where it matches the auction.
+  - Counter-examples:
+    - $[[2,2],[2,0]]$: ratio exactly ½ and cardinality 1 vs 2. $[[3,2],[2,0]]$: no ties, 3 vs 4.
+    - The 8 × 1 corridor through the benefit model: greedy cost 9 vs optimum 7.
+    - The κ = 4 variant: no ½ bound in original units.
+  - Edge cases, determinism, validation (non-square, negative entries).
+
 ### 4.3 Allocation policy
 
 - **Triggers:** task released; task delivered; robot became idle; a robot's plan status became `unreachable`; map event. At most one auction per step.
 - **Eligible:** robots in mode idle or to_pickup; *available* tasks pending or assigned-but-not-picked (model §4).
 - **Pre-emption:** only through the auction, with hysteresis $h$.
 - **Output application:** a changed assignment changes the robot's goal, which is trigger T1 for replanning.
+
+**Implementation notes (Issue #4, stage 4: allocation policy and coordinator).**
+- `allocation/policy.py`: `AllocationPolicy(allocator, BenefitConfig)` with `step(view, api, distance)` and an `AllocationEvent` record per auction. `planning/coordinator.py`: `AllocationCoordinator(planner, allocator, benefit_config=…)`, named `"<allocator>+<planner>"`.
+  - The path monitor, release/hold policy, suggestions and reporting now live in a shared base class. The Issue #3 fixture coordinator `PlanningCoordinator(planner, assignments)` keeps its name, signature and behaviour; the Issue #3 integration, regression and e2e tests pass unchanged.
+- **Triggers and the one-auction rule.** Each step the policy compares the view with a snapshot from the previous step and collects, in this order: `released` (a task left `unreleased`), `delivered`, `idle` (a robot became idle other than through the policy itself), `unreachable`, `map_event` (grid version changed) and `retry`. If any fired, it runs **exactly one** auction for the step.
+  - A release after an `unreachable` plan is detected by the monitor *after* the step's auction, so it is carried over and triggers the next step's auction.
+  - Aging is not a trigger (as specified): it acts at the next allocation event.
+  - No auction runs while nothing fires. This loses no assignment: after an auction the matching has maximum cardinality (model §8), and only the triggers can create a new feasible (idle robot, unassigned task) pair. Robot moves cannot, because under CC (§4.2 notes) feasibility depends only on components, which only map events change.
+- **Eligibility.** $R_f$: robots in mode idle or to_pickup, so carried tasks are never pre-empted. $J_p$: tasks the engine reports as *available* (pending or assigned, both cells free, $D(p_j, d_j) < \infty$). The current task $\tau_i$ of a to_pickup robot gets $+h$.
+  - A triggered step with no eligible robot, or with neither an available task nor a held one, is counted as `skipped`; no auction runs.
+- **Application.** The new matching $\sigma$ is compared with $\tau$ in robot-id order. *All* robots whose task changes or disappears are unassigned first (the task returns to pending), then all new assignments are made. So a task can move between robots within one event, and the engine's state machine (assign only idle robots and pending tasks) is respected.
+  - A robot whose task became unavailable and gets no new one is unassigned, and the task waits, pending, until it is available again (model §5.3 step 4).
+  - The new goal $g_i$ is the pickup cell. The monitor sees $g_i \ne$ its stored goal and replans with T1 in the same step. A robot left without a task gets goal `None` and no call.
+  - Not a replan: switching to another task *with the same pickup cell* leaves $g_i$ unchanged, so the existing path stays valid and T1 does not fire.
+- **Pre-emption** exists only through this auction and only beyond the hysteresis margin, because $h$ is inside the benefits.
+- **Ties keep the current assignment** (`prefer_current`, a refinement this stage adds). Model §8 says a robot keeps its task "unless another assignment is better by more than $h$", so at a gain of exactly $h$ it must keep it.
+  - With integer distances such exact ties are reachable. Without a rule, the result depended on the task order: a scratchpad check showed both allocators switch at gain $= h$ whenever the other task is listed first.
+  - The allocator is therefore given $A' = (k+1)A + E$, with $E_{ij} = 1$ on feasible current pairs. Every optimum of $A'$ is an optimum of $A$ that keeps as many current assignments as possible (exact lexicographic refinement; proof in `prefer_current`). Real-valued values are unchanged.
+- **Release on `unreachable`** (model §5.3 step 4). Normally the `map_event` auction pre-empts it: map events are applied before the coordinator runs, so that auction already drops every pair that became infeasible, and the monitor then only plans reachable pickups. This was observed in the map-event integration test: `releases = 0`.
+  - The path is reached when the map-event solve is capped (`retry`). The robot then keeps a cut-off pickup, the monitor's T2 call returns `unreachable`, and the robot releases the task. The next step's auction is triggered by `unreachable` and `retry`; an integration test covers this.
+- **Statistics:** `extra["planning"]["allocation"]` holds auctions, skipped events, trigger counts, assignments, pre-emptions (robot switched task), lost tasks (robot left with none), tasks reassigned, timeouts and bids. Each auction also adds a deterministic `"alloc"` trace field (triggers, assigned, unassigned).
+- **Not in this stage:** the CLI `--allocator` option (stage 6) and the baseline controller (stage 5). Tests use the existing Issue #3 plan follower (`SuggestionFollower`).
 
 ### 4.4 Priority semantics: what the tests check
 
@@ -381,6 +554,33 @@ The allocation implements **weighted priority** (model §8.1). Tests verify the 
 - **Hysteresis test:** no switch when the gain is ≤ $h$; a switch when it is $> h$.
 - **Aging property tests:** P1 (FIFO within a level), P2 (outranking newly released tasks after $A^\*$ steps), P3 (a younger higher-level task regains precedence), all on the priority term, with exact arithmetic.
 - **Starvation mitigation** is *not* a unit-test property. It is measured in E3 (waiting-time tails per level, $\alpha > 0$ vs $\alpha = 0$).
+
+**Implementation notes (Issue #4, stage 4: tests).**
+- `tests/unit/allocation/test_priority.py`. With $\alpha = 1/100$ and $s = 100$, $P_j = \kappa\,w(\pi_j)(100 + a_j)$ is an exact integer, so expected outcomes are computed from the model's formulas with integers or `Fraction` only.
+  - *Threshold:* 150 Hypothesis examples per allocator (κ, levels, ages, positions), on both sides of $\kappa(\tilde w_{\text{hi}} - \tilde w_{\text{lo}}) = c_{\text{hi}} - c_{\text{lo}}$; at exact equality, both choices are optimal and the result is deterministic. Also an explicit instance (a level-2 task buys a detour of fewer than 10 cells) and a check that priority is not strict.
+  - *Hysteresis:* $h \in \{0, 2, 5\}$ and gains from $-2$ to $h+3$, both task orders, both allocators: no switch iff gain ≤ $h$. The equality case is shown to be an exact tie of the untie-broken matrix.
+  - *`prefer_current`:* on random benefit problems, the result is optimal for the original integer matrix (Hungarian) and keeps at least as many current pairs.
+  - *P1, P2, P3* on the priority term: FIFO within a level; $A^\* = 300$ for $P = 3$, tight at 299; P3's exact condition and that the advantage is only temporary.
+- `tests/unit/allocation/test_policy.py`: hand-built views and a fake `AssignmentAPI` that enforces the engine's rules. Covers:
+  - trigger detection and order, and one auction for a step with four triggers;
+  - `unreachable` carried to the next step without a duplicate `idle`;
+  - retry after a capped solve; skipped steps;
+  - carried tasks never pre-empted; unavailable tasks excluded and their holder released;
+  - a task moving between robots within one event (unassign before assign);
+  - pre-emption by an urgent task, then no switch at gain $= h$;
+  - determinism.
+  All of it runs for both allocators.
+- `tests/integration/test_allocation_integration.py`: the engine with `AllocationCoordinator` and the plan follower.
+  - Planner {A\*, RRT\*} × allocator {auction, sequential}: delivery, one auction per step, T1 at $t = 0$.
+  - Urgent-task pre-emption: switch at release, **T1 replan in the same step**, urgent task picked first, the low task re-auctioned and delivered, `"alloc"` trace field.
+  - Hysteresis in simulation: no switch and no T1 at gain 0.8, a switch and a T1 at gain 2.8.
+  - Carried task kept. Weighted priority ordering, both equal-travel and not strict.
+  - Map-event re-allocation with `releases = 0`.
+  - Determinism: byte-identical traces on two generated dynamic scenarios.
+- **Aging in simulation (constructed scenarios, not guarantees):**
+  - *Mitigation, no backlog:* one robot, a level-1 task at $x = 16$, level-2 tasks released every 2 steps (one always fresh when the robot frees). The low task is picked at $t = 126$ with $\alpha = 0$ (after the stream ends) and at $t = 18$ with $\alpha = 0.1$.
+  - *Limitation, kept as a counter-example:* the same stream with the low task at $x = 25$ and level-3 tasks. With $\alpha = 0.1$ the low task wins an auction at $t = 42$, but is then pre-empted by an aged level-3 task from the backlog that formed during its trip, and is picked at $t = 135$, the same as with $\alpha = 0$.
+  - This matches model §4 (P3, "Not claimed (i)"): multiplicative aging lets a backlog of higher levels outrank an old low task. It was found while building the first scenario, whose initial design assumed no backlog.
 
 ---
 
@@ -408,9 +608,25 @@ At most one planner call per robot per step. Calls go through the shared procedu
 
 **Tests.** Rejoin advances the index without replanning. A deviation triggers T3. A map event on the path triggers T2. A stall triggers T4 with a detour around the blocked cell, but never blocks the goal. Cooldowns are respected. Trigger attribution is correct.
 
+**Implementation notes (Issue #3).**
+- `planning/monitor.py` (`PathMonitor`) and `planning/coordinator.py` (`PlanningCoordinator`). The coordinator runs the bookkeeping at the start of each step's pipeline step 3, on the positions at $t$. This is equivalent to "after each step" (architecture §2, step 9) and needs no extra engine phase.
+- When several triggers fire, the single call is attributed to the first in the order T1, T2, T3, T4, T5, T6. Every call is logged with time, robot, trigger, status, `degraded` and path length. These fields, but no timings, are written to the trace (`"plans"`), so traces stay byte-identical (X-1 holds for both planners).
+- **Interpretations of model §5.4, made explicit here and in the model:**
+  1. *T2 and the goal cell.* "Excluding the goal" applies to the dynamic set (the goal is never in $B_i$). The goal is still checked against $S(t)$ at every step (O(1)). Otherwise a map event on the goal would never be detected, and the `unreachable` hold/release policy of model §5.3 step 4 could not apply.
+  2. *T2 on degraded plans* checks $S(t)$ only. A degraded path crosses dynamically blocked cells by construction, so a dynamic check would fire on every step. Degraded plans are re-checked by T6 after $T_{\text{cd}}$.
+  3. *T4 at the goal.* A stall in front of an occupied goal cell does not trigger a replan, and the goal is never added to the block list. Waiting there is the occupied-goal policy of model §5.3.
+  4. *T4 needs an occupied cell.* Two robots that both keep proposing the same **free** cell are frozen by the arbiter every step without either next cell being occupied, so T4 does not fire. For a pure plan follower this is a deadlock. Resolving it is the job of the controllers (baseline right-of-way rule, learned policies; Issue #4+), not of the planner. E2 reports how often it limits completion. *Issue #4:* the baseline's right-of-way lets exactly one claimant move. Mutual blocking of robots in each other's cells (head-on, rotation) is handled by the opt-in deadlock resolver of §5.5 (trigger T7), not by T4.
+  5. *T4 vs T6 on a degraded plan* (documented by `test_degraded_plan_and_stall_interaction`). With the defaults $T_{\text{cd}} = 3 < T_{\text{stall}} = 4$, a robot stalled in front of a dynamically blocked cell of a degraded path is replanned by T6 every 3 steps. Each replan resets the stall counter, so T4 does not fire while the plan stays degraded. T4 fires first only if $T_{\text{cd}} \ge T_{\text{stall}}$. This is the specified trigger order applied literally, not a separate rule.
+- Release/hold policy (model §5.3 step 4): a robot whose pickup becomes statically unreachable releases the task (`AssignmentAPI.unassign_task`). **Issue #3 fixture logic only:** the fixture allocation re-offers a released task to the same robot only once that robot's static reachability *can* have changed, i.e. after a map event (grid version) or after the robot has moved, and only while the task is available. Re-offering every $T_{\text{cd}}$ steps in an unchanged situation repeated the same `unreachable` call and release every 3 steps (14 releases in 40 steps in the review probe; changed in V-6, regression test `test_release_is_not_reoffered_until_something_changes`). In Issue #4 the auction replaces this: a released task is re-auctioned and can go to another robot. A robot whose drop-off becomes unreachable holds the task, stays (suggested `stay`) and retries with T5 every $T_{\text{cd}}$ steps.
+- Engine hooks: a coordinator that also implements `sim.coordinator.PlanReporting` (`plan_valid`, `trace_fields`, `episode_stats`, `finish`) gets plan adherence (model §9.3) recorded by the engine, its planning fields added to the trace, and its statistics added to `EpisodeMetrics.extra["planning"]`. This is an additive extension of the Issue #2 coordinator contract; earlier coordinators are unaffected.
+- `control.base.SuggestionFollower` ("follow") plays the masked suggested action. It is the minimal plan follower used by tests and E2. The reference follower of Issue #4 takes over its role in the controller registry.
+- **X-12 / X-5 results:** `tests/unit/planning/test_monitor.py` checks each trigger at its exact step: T1; rejoin within $H_r$ without replanning; T3 beyond $H_r$; T2 for an obstacle or a map event within $H_v$ and not beyond it; T4 exactly after $T_{\text{stall}} = 4$ steps with block expiry; no T4 at the goal; T5 every $T_{\text{cd}} = 3$ steps; T6. `tests/integration/test_planning_integration.py` runs the same checks inside the engine for both planners: a map event on the path gives T2 and a detour; a map event on the drop-off gives `unreachable`, hold, T5 retries at $t = 12, 15$, 11 blocked-goal robot-steps, then delivery; a map event on the pickup gives a release and a re-take; an obstacle crossing the path gives T2. Plan adherence and deviation rate are checked against hand computation.
+
 ### 5.3 Controllers (non-learning)
 
 **Reference follower (diagnostic).** $a_i = \hat a^{\text{plan}}_i$ (stay if masked). It defines the counterfactual of model §9.2 and the episode-level comparison point. $O(N)$ per step.
+
+*Implementation (Issue #4 stage 6):* `control/reference.py`, `ReferenceFollower` (`name = "reference"`). Its actions are exactly those of the Issue #3 plain follower `SuggestionFollower` (property-tested on 300 random worlds; the CLI's `follow` stays as an alias). It adds decision counts (`follow`, `no_plan`, `masked`). X-10 is checked in every scenario × planner × allocator × shield combination: $\mathcal{K}^{\text{ctrl}}_t = \mathcal{K}^{\text{ref}}_t$ at every step and $N^{\text{avoided}} = N^{\text{introduced}} = 0$.
 
 **Rule-based baseline.** For each robot, with target $c = x_i + \Delta(\hat a^{\text{plan}}_i)$:
 
@@ -422,13 +638,62 @@ elif ∃ robot j adjacent to c whose suggested target is c and
 else:                                                              move to c
 ```
 
-Here $\tilde\pi$ is the effective priority of the carried or assigned task, with idle lowest. The baseline reads neighbours' *suggested* actions, which is available because planning is centralised. It is still a heuristic, since neighbours controlled by learned policies may not follow their suggestions. Deadlocks are handled by the controller-agnostic stall trigger T4, not by a baseline-specific rule.
+Here $\tilde\pi$ is the effective priority of the carried or assigned task, with idle lowest. The baseline reads neighbours' *suggested* actions, which is available because planning is centralised. It is still a heuristic, since neighbours controlled by learned policies may not follow their suggestions. ~~Deadlocks are handled by the controller-agnostic stall trigger T4, not by a baseline-specific rule.~~ *Revised in Issue #4:* T4 does not resolve mutual blocking: the symmetric replans of two blocked robots meet again (stage 5A measurement). Deadlocks are detected and, where a passing cell exists, resolved by the opt-in coordinator-level resolver of §5.5 (trigger T7), enabled for the baseline by default.
 
 **Complexity.** $O(N)$ per step with the cell → robot map.
 
-**Limitations (measured, not hidden).** Unpredictable obstacle turns can still produce $\textsf{RO}$ conflicts. Corridor deadlocks are mitigated by T4, not eliminated.
+**Limitations (measured, not hidden).** Unpredictable obstacle turns can still produce $\textsf{RO}$ conflicts. ~~Corridor deadlocks are mitigated by T4, not eliminated.~~ *Revised:* corridor deadlocks are resolved only where a passing cell exists and under the progress assumptions of §5.5; otherwise they are reported as unresolved.
 
-**Tests.** Yielding to a higher priority; tie-break by id; no $\textsf{RR}$ conflicts among baseline robots in static scenarios (property test); head-on corridor case resolved via T4.
+**Tests.** Yielding to a higher priority; tie-break by id; no $\textsf{RR}$ conflicts among baseline robots (property test); ~~head-on corridor case resolved via T4~~ *revised:* head-on corridor: resolved by the §5.5 detour with two lanes, reported unresolved with one lane.
+
+**Implementation notes (Issue #4, stage 5A: baseline right-of-way).**
+- `control/baseline.py`: `BaselineController(alpha=0.01, sensing_radius=3)`, `name = "baseline"`, implementing the `Controller` protocol (`reset`, `act`). `decide(view)` returns each robot's action with a decision reason.
+  - The rule is the pseudocode above, applied in this order: no plan or at the goal; masked; target occupied by a robot or an obstacle; target in $\hat Z_i$; yield; move.
+  - $\hat Z_i$ comes from `planning.constraints.sense`, still the only definition of $Z_i$ and $\hat Z_i$. Its map argument is now typed by a protocol (`FreeCellQuery`), so the read-only `MapView` can be passed; the behaviour is unchanged.
+  - No deadlock-detour rule (stage 5B), no reference follower, no shield, no X-10.
+- **Right-of-way.** Every unmasked, non-stay suggestion claims its target cell $c$. The winner of $c$ is the claimant with the largest $(\tilde\pi_j, -j)$: priority first, then the lower id. This is the pseudocode's "∃ $j$ adjacent to $c$ whose suggested target is $c$ and $(\tilde\pi_j > \tilde\pi_i$ or $(\tilde\pi_j = \tilde\pi_i$ and $j < i))$", since every claimant of $c$ is adjacent to it. A masked suggestion claims nothing; its target is a static obstacle, which every other claimant would see as masked too.
+- **$\tilde\pi$ (interpretation, stated here).** The aged weight $w(\pi_j)(1 + \alpha\max(t - \rho_j, 0))$ of the robot's assigned or carried task, with the allocation's $\alpha$; idle robots get $0$, below every task, since $w \ge 1$.
+  - The age keeps growing after pickup, as in the engine's `Task.age`. Model §4 defines the waiting age only until pickup, and the controller has no pickup time in its view.
+- **Collision property (Guaranteed under the assumptions; property-tested).**
+  - *Assumptions.*
+    - (a) Every robot plays the baseline on the same view.
+    - (b) Obstacle moves follow the simulator's rule: never into a cell occupied at $t$ by a robot or an obstacle, never a swap (model §2, `resolve_obstacle_moves`).
+    - (c) For the RO-vertex part only: each obstacle either stays or moves by its velocity, and $r_s \ge 2$.
+  - *Claim.* Under (a) and (b), the joint proposal contains no $\textsf{RRv}$, $\textsf{RRs}$, $\textsf{ROs}$ or invalid move. Under (a)–(c) it contains no conflict at all.
+  - *Proof.*
+    - Invalid moves: only unmasked suggestions are played.
+    - A robot never moves into a cell occupied at $t$ by a robot or an obstacle. That excludes $\textsf{RRs}$, $\textsf{ROs}$, and an $\textsf{RRv}$ against a robot that stays.
+    - Two robots moving into the same cell would both be claimants of it, but only the winner moves.
+    - For $\textsf{ROv}$, an obstacle reaching $c$ at $t+1$ must come from an adjacent cell $z \neq c$. Under (c) that means $z + v = c$. Then $\|z - x_i\|_\infty \le 2 \le r_s$, so the obstacle is sensed and $c \in \hat Z_i$ ($c$ is free), and robot $i$ stays. ∎
+  - *What it does not cover.* Obstacles that turn or start moving, and obstacles beyond $r_s$, can still give $\textsf{ROv}$. Teams with robots that do not follow their suggestions (learned controllers) break assumption (a). Conflict-freedom is not progress: see the deadlocks below.
+- **Statistics:** `BaselineController.episode_stats()` reports decisions per reason (`move`, `no_plan`, `masked`, `robot_ahead`, `obstacle_ahead`, `predicted_obstacle`, `yield_priority`, `yield_tie`), yields, active robot-steps and `wait_fraction` (waiting share of active robot-steps).
+  - The engine already records conflicts by type, blocked moves, plan adherence (waiting lowers it) and deviation (waiting on the path is not T3).
+  - Writing the controller statistics into `EpisodeMetrics` and the CLI belongs to stage 6.
+- **Limitations (measured, not hidden).**
+  1. *No progress guarantee; head-on encounters are not resolved.*
+     - Two robots facing each other both wait (`robot_ahead`), and so do robots in a cycle. With two robots carrying tasks to opposite ends of a corridor, nothing is delivered in 60 steps, **even with a second lane**.
+     - T4 fires for *both* robots at the same step, both replan symmetrically and they meet again. The test this section expects, "head-on corridor case resolved via T4", is therefore **not met**; recorded in `tests/integration/test_baseline_integration.py`. T4 can resolve asymmetric cases: in `planning_detour` (A\*, auction) only one robot's T4 fired, and the robots passed.
+     - A baseline-specific deadlock rule is open for stage 5B. T4 is not that rule. *Stage 5B (implemented, §5.5):* with the resolver on, the two-lane case is resolved; the single-lane case is reported as `no_passing_place` (no cell lies off the other robot's path). The Stage 5A observation (resolver off) is unchanged and still tested.
+  2. *Conservative following.* A robot waits behind a robot that is leaving its cell, because the cell is occupied at $t$. Convoys therefore move with gaps, one step lost per robot. With map events timed against a convoy this changes outcomes: in `corridor_queue` (sequential) the deferred wall falls between the robots, giving 1/3 delivered against the follower's 3/3.
+  3. *Idle robots never move aside* (no parking in the controller; endpoint recovery, §5.6, adds parking for active endpoints). An idle robot on a corridor or on another robot's goal blocks it until T4 finds a detour, if one exists.
+     - An idle robot *on the goal cell* blocks that task for good: T4 never targets the goal, and the occupied-goal policy is to wait.
+     - The deadlock resolver (§5.5) does not detect this: an idle robot has no plan, so it forms no wait-for cycle.
+     - Measured in the preliminary E5 (`05` §B.6): 28 of the baseline's 91 undelivered tasks.
+     - *Addressed by endpoint recovery (§5.6)* for an idle robot on an active task endpoint (parking). An idle robot on a corridor cell that is no endpoint is still not moved.
+  4. *$\textsf{ROv}$ from unpredicted obstacle moves:* 1–2 per episode in 4 of the 20 demo runs.
+  5. *Waiting costs throughput.* In `planning_detour` (A\*, auction) the baseline delivers 1/2 in 80 steps, against 2/2 for the follower, which relied on 12 conflicts cancelled by the arbiter.
+  6. *Robot–obstacle goal deadlock* (added after the Project Issue #4 audit; the same mechanism as E2 cause 2). A moving obstacle on the robot's goal whose next move is the robot's own cell never moves: obstacles never enter robot cells (model §2). The robot waits in front of it (`obstacle_ahead`), as the occupied-goal policy of model §5.3 prescribes. Neither moves again.
+     - Neither the baseline nor the deadlock resolver handles this: it is not a robot–robot cycle.
+     - Measured in the preliminary E5: 61 of the baseline's 91 undelivered tasks (54 with patrol obstacles, 7 with random-walk obstacles).
+     - *Addressed by endpoint recovery (§5.6)*, the robot-side retreat; obstacle motion (A-5) is unchanged. With `--endpoint off` the limitation is as described here.
+- **Tests.**
+  - `tests/unit/control/test_baseline.py`: each rule on hand-built views (mask, occupied, predicted, sensing radius); vertex conflicts by priority, by id and idle-lowest; aging breaking equal levels; 3 and 4 robots competing for one cell; swap and 4-cycle; conservative following; statistics; validation.
+    - Property tests against the simulator's own `detect_conflicts` and `resolve_obstacle_moves` (400 examples each): no conflict at all under (c); only $\textsf{ROv}$ with a turned obstacle otherwise. A non-vacuity check shows the plain follower does produce RR conflicts on the same worlds.
+  - `tests/integration/test_baseline_integration.py`:
+    - All 5 demo scenarios × {A\*, RRT\*} × {auction, sequential}: no $\textsf{RR}$, $\textsf{ROs}$ or invalid move.
+    - A junction with 2 robots (priority, id tie) and with 3 robots: pass order equals right-of-way order; no conflicts; all delivered; adherence below 1; no T3.
+    - Head-on in 1 and 2 lanes: conflict-free, not resolved, symmetric T4.
+    - Byte-identical traces and statistics on repeated runs.
 
 ### 5.4 Safety shield (optional)
 
@@ -446,6 +711,228 @@ SHIELD(a_i):  c ← x_i + Δ(a_i)
 **Complexity.** $O(1)$ per robot.
 
 **Tests.** Replacement cases; a no-op on a safe action; interventions logged; disabled mode is the identity.
+
+**Implementation notes (Issue #4 stage 6).**
+- `control/shield.py`: `Shield(mode="off"|"predictive", sensing_radius=3)`.
+  - `apply(view, proposal)` returns $a^{\text{arb}}$ and `ShieldEvent`s $(t, i, a_i, c, \text{reason})$, where the reason is `current` ($c \in Z_i$) or `predicted` ($c \in \hat Z_i \setminus Z_i$).
+  - $Z_i, \hat Z_i$ come from `planning.constraints.sense`, the single shared definition.
+- The engine applies it at pipeline step 5 (`Engine(..., shield=...)`, `SafetyLayer` protocol); `off` is the identity.
+  - Conflicts are counted on $a^{\text{arb}}$. The counterfactual sets use $a^{\text{ctrl}}$, the raw proposal (model §9.2).
+  - Shield statistics, under `extra["shield"]` only when a shield is configured: interventions, interventions per 100 robot-steps, prevented $\sum|\mathcal{K}^{\text{ctrl}} \setminus \mathcal{K}^{\text{arb}}|$, introduced $\sum|\mathcal{K}^{\text{arb}} \setminus \mathcal{K}^{\text{ctrl}}|$.
+  - Trace fields `shield` (the interventions) and `arb_actions` appear only on steps with an intervention.
+- **Properties, tested against the simulator's own detector:**
+  - Every output action equals the input or `stay` (400 random worlds, arbitrary simultaneous proposals of all robots).
+  - No shielded robot is ever `at_fault`. Its `stay` can only make it the *target* of another robot's move, which counts as introduced, at the mover's fault.
+  - With constant-velocity obstacles and $r_s \ge 2$, the shielded plain follower proposes no RO conflict (400 worlds). With arbitrary obstacle turns, RO vertex conflicts still occur (counter-example found).
+  - RR vertex and swap proposals and invalid moves pass unchanged, so masking defects stay visible.
+- **With the baseline it never intervenes** (same $r_s$): the baseline already stays in front of current and predicted obstacle cells. Checked in all 5 demo scenarios × 2 planners × 2 allocators.
+  - Demo `shield_corridor`: the reference follower proposes 37 RO conflicts with the shield off. With it on there are 37 interventions and 0 conflicts. The obstacle pins itself in the single lane, so nothing is delivered in either case.
+
+### 5.5 Deadlock detection and detour resolution (Issue #4 stage 5B)
+
+**Purpose.** Resolve mutual blocking that the right-of-way baseline makes conflict-free but not live: a head-on pair, or a rotation of robots each in the next one's way. T4 is a planning-monitor stall trigger, not a resolution rule: for two mutually blocked robots it fires symmetrically and their replans meet again (measured, stage 5A).
+
+**Placement (approved design).** `planning/deadlock.py`, `DeadlockResolver(DetourParams)`, used by `AllocationCoordinator(..., deadlock=DetourParams())`.
+- It is **opt-in** and off by default. The CLI enables it exactly for `--controller baseline` with an allocator (`--deadlock auto`).
+- It never chooses actions. For one robot of a cycle it replaces the goal given to the path monitor by a *passing cell*. The planner (A\* or RRT\*) plans there, and the controller keeps all its rules.
+
+**Definitions.**
+- Robot $i$ is *active* if it is on a valid plan and not at its goal; its next planned cell is $n_i$.
+- *Wait-for graph:* $i \to j$ iff $i$ is active and $n_i = x_j$. Out-degree is ≤ 1, so cycles are vertex-disjoint and found in $O(N)$. The 4-connected grid is bipartite by the parity of $x + y$, so every cycle has even length: a head-on pair, or a rotation of ≥ 4 robots.
+- *Temporary waiting:* waiting that is not part of a detected deadlock. This includes queues, right-of-way yields, obstacle waits, and blocking by an idle robot or by a robot at its goal (not a cycle; idle robots on active endpoints are parked by endpoint recovery, §5.6, not by the resolver).
+- *Repeated mutual blocking:* the same member set forms a new cycle again within `recur_window` steps.
+- *Detected deadlock:* the same cycle (members and cells) for ≥ `detect_steps` consecutive steps (*persistent*), or the `recur_count`-th occurrence within the window (*recurrent*).
+- *Unresolved:* no passing cell exists even with obstacles and robots outside the cycle ignored (`no_passing_place`), or the attempt budget is exhausted (`unresolved_retry_limit`). It is reported once and re-evaluated only after a map change or a member's goal change.
+
+**Algorithm.**
+1. *Yielder.* Members in ascending $(\tilde\pi_i, -i)$ order: lowest effective priority first; on a tie the higher id yields, as in the baseline. The first with a passing cell yields. A higher-priority robot can therefore yield when the lower one is boxed in; priority is a preference, not strict precedence.
+2. *Passing cell* $s$: BFS from the yielder over static free cells, with every robot and obstacle cell blocked. Take the nearest cell that is (P1) on no other member's remaining path, (P2) not an obstacle's constant-velocity prediction, (P3) not reserved by another detour, and not the yielder's own task goal; ties by $(x, y)$.
+3. *Detour* (state machine): PENDING → TO_WAYPOINT. The goal becomes $s$ (T7); the other members' cells are added as avoided cells for the detour plan; T4 is suspended for every member. The yielder reaches AT_WAYPOINT, then is **released**: the goal returns to the task goal (T7, normal replanning, the original route is not replayed). Release happens when every other member is at its goal, or is off $P_y^0$ (the yielder's route at detection) and its next `release_horizon` cells avoid $P_y^0$. Otherwise a timeout after `hold` $= 2|P_w| + $ `hold_extra` steps at $s$ releases it.
+   - **Abort** (and re-detection while the cycle persists): $s$ blocked, another member's plan runs through $s$, the detour plan is `unreachable`, or no progress for `abort_steps`.
+   - **Cancel:** the yielder's task goal changes (allocation pre-emption, pickup).
+   - **Attempt bound:** at most 1 + `max_retries` detours per (member set, member task goals). A map change resets budgets and unresolved marks.
+4. *Defaults* (`DetourParams`): `detect_steps` 2, `recur_count` 3, `recur_window` 20, `abort_steps` 4, `hold_extra` 4, `max_retries` 2, `release_horizon` 5, unbounded search radius, $\alpha$ 0.01.
+   - The coordinator validates `detect_steps` < `stall_threshold` (4), so that detection precedes T4.
+
+**Changes to the reviewed design, found during implementation (documented consequences).**
+1. *Release horizon.* The reviewed rule required the winner's *whole* remaining path to avoid $P_y^0$. In `rooms_dynamic` this held a yielder for 16 steps after the conflict had dissolved, because both routes ended in the same region. The rule now looks only `release_horizon` cells ahead.
+   - Consequence: a later crossing far ahead is a *new* encounter, detected and handled again, not covered by the first detour.
+2. *Attempt bound counts starts.* The reviewed bound counted only aborts. With the earlier release, a detour could complete and the cycle re-form indefinitely.
+   - Consequence: detours per (member set, goals) are bounded by $1 + $ `max_retries`, so livelock across detours is bounded per goal configuration. It is not excluded: new tasks give a fresh budget.
+3. *Static vs dynamic absence of a passing place.* The reviewed design marked "no passing place" unresolved until a map or goal change. A dynamic obstacle temporarily occupying the only pocket then disabled resolution permanently (found in a constructed pocket scenario).
+   - Now: if a cell exists with obstacles and non-member robots ignored, the event is `no_passing_place_dynamic`, re-checked every `abort_steps`; only static impossibility is marked unresolved.
+4. *Release policy.* An `unreachable` result of a *detour* plan does not trigger the model §5.3 task release (it aborts the detour instead). Otherwise the yielder would lose its task.
+5. *Trace stability.* `T7` appears in `calls_by_trigger` only when the resolver is enabled. With the resolver off, traces of 46 configurations are byte-identical to the pre-5B snapshot.
+
+**Safety (G21, checked against the code).** The stage 5A proof (§5.3 notes) uses only the controller's rules 1–6, occupancy and predictions at $t$, and the single winner per contested cell. It holds for *arbitrary* suggested actions; the property tests draw them at random. The resolver changes only monitor goals, hence only suggestions, and never an action. So, under assumptions (a)–(c) of §5.3, the joint proposal still has no RR, ROs or invalid move, and none at all under (c). No assumption is added or weakened for safety. In tests: 0 RR / ROs / INV with the resolver on in every demo scenario × planner × allocator, and in all 600 preliminary-E5 episodes.
+
+**Progress (G22, conditional; two robots only).** Re-examined against the code in the Project Issue #4 audit; R7–R9 were implicit before and are now stated.
+
+The claim: a *detected* deadlock of exactly two robots is resolved in finitely many steps when all of R1–R9 hold. The table gives what the code does when one fails.
+
+| # | Assumption | If it fails, the resolver … |
+|---|---|---|
+| R1 | no map event during the detour | aborts if $s$ becomes blocked. Every map change clears attempt budgets and unresolved marks, and the cycle is detected again. |
+| R2 | no obstacle enters $s$ or the yielder's route | lets the yielder wait (baseline `obstacle_ahead` / `predicted_obstacle`) and aborts after `abort_steps` without movement; re-detection follows |
+| R3 | no robot outside the pair enters $s$ or the route | same as R2 (`robot_ahead`) |
+| R4 | the winner's path is unchanged until it passes | aborts if the winner's new path crosses $s$; otherwise release uses the current paths |
+| R5 | a passing cell exists | reports `no_passing_place` (static: once, until a map or goal change) or `no_passing_place_dynamic` (re-checked every `abort_steps`) |
+| R6 | the winner's goal is not on the yielder's remaining route | *nothing*: once the winner is idle at its goal it has no plan, so no cycle exists. The yielder is then blocked by an idle robot, which is neither detected nor reported (limitation 3 of §5.3). |
+| R7 | the planner finds a path to $s$ (A\*: guaranteed, complete on the snapshot; RRT\*: not, finite budget) | gives the yielder no plan: no movement, abort after `abort_steps`, re-detection; the attempt bound ends in `unresolved_retry_limit` |
+| R8 | both robots run the baseline (assumption (a) of §5.3) | with other controllers the collision property G19 does not apply; physical collisions are still impossible (G1). The progress sketch below does not apply. |
+| R9 | neither robot's task goal changes during the detour | cancels the detour; the new goals give a fresh attempt budget |
+
+- *Sketch (under R1–R9).*
+  - The yielder's next cell on its route to $s$ is never occupied: the winner is behind it or waiting (R2, R3). The two never target the same cell, because the winner targets the yielder's current cell. So the yielder reaches $s$ in $d$ steps (R7).
+  - $s$ is off the winner's path (P1), so the winner then advances at least one cell every two steps (conservative following) and leaves $P_y^0$ (R4). Release follows within the horizon, and the yielder replans with the winner behind it.
+- **Detection scope.** Only robot–robot wait-for **cycles** are detected. These are *not* detected and *not* reported:
+  - a robot blocked by an idle robot, or by a robot at its goal;
+  - a robot waiting for a dynamic obstacle on its goal (the robot–obstacle goal deadlock, limitation 6 of §5.3);
+  - a chain ending at a robot that waits for an obstacle.
+
+  So `unresolved_at_end` counts only unresolved robot–robot cycles. It is **not** a count of stuck robots: the preliminary E5 had 0 unresolved cycles but 89 tasks stuck on idle robots or obstacles (`05` §B.6).
+  The first two cases, when the blocked cell is the robot's *task goal*, are handled by endpoint recovery (§5.6), which reports its own unresolved cases.
+- **Cases it cannot resolve (by design or by construction):**
+  - (i) head-on encounters with no cell off the other robot's path, e.g. a single lane with goals at both ends: `no_passing_place`;
+  - (ii) R6 and the idle-robot cases above (not detected);
+  - (iii) robot–obstacle goal deadlocks (not detected);
+  - (iv) an obstacle pinned permanently in the only passing place (found in a constructed pocket scenario): classified `no_passing_place_dynamic` and re-checked every `abort_steps` for the rest of the episode, never reported unresolved;
+  - (v) a yielder that keeps *moving* without approaching $s$, e.g. alternating T2 replans: `abort_steps` measures movement, not distance to $s$, so no timeout applies before arrival. Theoretical; not observed in any test or experiment;
+  - (vi) repeated re-formation of a cycle: bounded by 1 + `max_retries` detours per (member set, goals), but every task change gives a fresh budget.
+- *Not claimed:* that every deadlock is resolvable; progress for cycles of ≥ 4 robots in general; absence of livelock beyond the attempt bound; completion.
+- **What the 4-robot rotation tests establish, and only this:**
+  - Configuration: one geometry, a 2 × 2 block of robots in an open 4 × 4 room, each robot's goal two cells straight ahead through the next robot's cell; the **auction allocator only**; A\* and RRT\* (400 iterations); no obstacles or map events; default `DetourParams`.
+  - Priority patterns (1,1,1,1), (3,3,3,1) and (1,3,3,3): the 4-cycle is detected at $t = 2$, the expected lowest-$(\tilde\pi, -i)$ robot yields to the expected passing cell, and all four deliver with 0 conflicts.
+  - Not established: other geometries (corridors, rooms with doors), cycles of 6 or more, simultaneous cycles plus third robots, dynamics, the sequential allocator, or the general draining argument.
+
+**Complexity.** Detection $O(N)$ per step. Per new detour, one BFS $O(V)$ plus $O(L)$ path-set checks plus one ordinary planner call. Release checks $O(\text{release\_horizon})$ per member per step.
+
+**Tests.**
+- `tests/unit/planning/test_deadlock.py` (17):
+  - cycle finding; passing-cell nearest, tie, blocked, forbidden, radius;
+  - persistent threshold exactly; recurrent detection; yielder by priority, by id, with fallback;
+  - predicted and reserved cells excluded; two simultaneous cycles get distinct cells;
+  - release horizon; the four abort reasons; the attempt bound and a fresh budget on new goals;
+  - cancellation; timeout; map-change clearing; validation, including `detect_steps` < `stall_threshold`.
+- `tests/unit/planning/test_monitor_detour.py` (4): T7 in and out with one unsplit leg; cancellation to a new goal is T1 and a new leg; T4 held and resumed; avoided cells shape the plan.
+- `tests/integration/test_deadlock_integration.py` (42):
+  - two-lane head-on resolved for {A\*, RRT\*} × {auction, sequential} × {unequal, equal priority}: lower priority, or higher id, yields; T7 at $t = 6$ and $10$; no T4; 4 legs; 0 conflicts;
+  - single lane: `no_passing_place`, nothing forced, no T7;
+  - 4-robot rotation resolved for 3 priority patterns × both planners (one geometry, auction only; scope above);
+  - map event on the passing cell: abort, re-detection, new cell, resolution;
+  - an obstacle delaying the detour (2 waits, completed);
+  - the collision property in 20 configurations; determinism; trace events; off-by-default.
+- **Measured effect on the demo scenarios** (baseline, 20 runs): total deliveries 89 with the resolver and 89 without. Gains in `rooms_dynamic` RRT\*/sequential (4 → 6) and `random_warehouse` RRT\*/auction (9 → 10); losses in `rooms_dynamic` A\*/auction (7 → 5) and `planning_detour` A\*/auction (1 → 0), from time spent detouring within the step caps. Reported as measured; not tuned.
+
+### 5.6 Endpoint recovery: idle-robot parking and retreat from a held goal (Project Issue #4 follow-up)
+
+**Why.** The preliminary E5 traced 89 of the baseline's 91 undelivered tasks to a task goal held *permanently* (`05` §B.6):
+- **Robot–obstacle goal deadlock (61 tasks).** An obstacle stands on the goal, and its next move is the cell of the robot waiting next to it. In 54 cases this was a patrol obstacle, whose shortest-path step is fixed; in 7 cases a random walk on a dead-end goal whose only exit was the robot. Obstacles never enter robot cells (A-5), and the robot waits for its goal (model §5.3), so neither moves again.
+- **Idle robot on the goal (28 tasks).** A robot that delivered there, or stopped there for another reason, stays forever: there is no parking.
+
+The planner was correct: the goal is never dynamically blocked (`constraints.py`, model §5.2). Model §5.2 called an obstacle on a goal "transient", but nothing in the model made it so. That was a specification gap, now closed by a robot-side rule. Obstacle motion (A-5) is unchanged.
+
+**Placement.** `planning/endpoint.py`, `EndpointRecovery(EndpointParams)`, used by `AllocationCoordinator(..., endpoint=EndpointParams())`.
+- *Defaults:* on in the CLI with an allocator, for every controller (`--endpoint off` disables it), in the benchmark workloads, and in the recovery E5 configurations.
+- *Opt-in constructor:* the bare constructor keeps it off, as with `deadlock=`, so that the stage-level tests keep pinning each stage's exact behaviour.
+- *Mechanism:* like the resolver, it never chooses actions. It replaces the goal given to the path monitor by a temporary cell; this goal change is trigger **T8**, the current leg is not split, and the task goal is restored with T8.
+- *Composition:* the resolver has precedence. A robot the resolver overrides is not in endpoint recovery, and its retreat or parking is cancelled. Resolver passing cells count as reserved cells here.
+
+**Definitions.**
+- *Active endpoints* $E(t)$: pickup and drop-off of released tasks that are pending or assigned, and drop-off of picked tasks.
+- *Occupant* of a goal $g$: a dynamic obstacle on $g$, or an idle robot on $g$. A busy robot is not an occupant; robot–robot cycles belong to the resolver.
+- *Blockage episode* of robot $i$: starts at the first step $i$ is adjacent to its task goal $g$ while $g$ has an occupant. It ends when that occupant leaves $g$ or $i$'s task goal changes.
+  - It is **temporary** if it ends before $i$ has waited $W$ consecutive steps adjacent to $g$; otherwise it is **persistent**.
+
+**Algorithm.**
+1. *Parking.* An idle robot (after this step's allocation) standing on a cell of $E(t)$ gets a parking goal. The cell is the nearest one, by BFS from the robot over static free cells not occupied by a robot or an obstacle, that is:
+   - (K1) not in $E(t)$;
+   - (K2) not reserved (another parking or retreat cell, or a deadlock passing cell);
+   - (K3) not a **cut vertex** of the free graph without the other stationary idle robots and the reserved cells. A parked robot never disconnects the map, and a single-access endpoint's entrance is never used;
+   - (K4) not occupied.
+
+   Ties are broken by $(x, y)$. The robot plans there with the configured planner (A\* or RRT\*), avoiding the cells of robots within distance 2 at the start (typically the ones waiting for the endpoint). Its priority stays 0, so every task-holding robot has right of way.
+   - *Ends:*
+     - **completed** at the cell;
+     - **cancelled** by a task assignment or by the resolver;
+     - **aborted** after `abort_steps` without progress, a statically blocked cell, a cell that became an active endpoint, or an `unreachable` plan. A new cell is searched `abort_steps` later.
+   - *No cell:*
+     - `no_parking_cell` when none satisfies K1–K3 in the robot's static component. Re-checked only after a map change or a change of $E(t)$;
+     - `parking_blocked_dynamic` when such a cell exists but none can be reached now past robots and obstacles. Re-checked every step.
+2. *Retreat.* When a blockage episode becomes persistent, the robot retreats.
+   - *Retreat cell:* the nearest cell, by BFS from the robot over static free cells not occupied by robots or obstacles within `retreat_radius`, at Manhattan distance ≥ 2 from the occupant **and** from the robot's current cell. Those are the cells the occupant could step into next. The cell must also be outside $E(t)$, not reserved, and not an obstacle's constant-velocity prediction; ties by $(x, y)$.
+   - *Movement:* the robot plans there (T8) with T4 suspended.
+   - *Outcomes of an attempt:*
+     - **succeeded** as soon as the occupant leaves $g$; the goal is re-assessed every step, and the task goal is restored (T8) and replanned;
+     - **timed out** after $H$ steps at the retreat cell; the task goal is restored and the robot may wait again;
+     - **aborted** after `abort_steps` without progress, a statically blocked retreat cell, or an `unreachable` plan (which does *not* release the task);
+     - **cancelled** when the task goal changes or the resolver takes the robot over.
+   - *Exhaustion:* at most $M$ attempts per blockage episode. When the robot has waited $W$ steps again after the last one, the episode is **exhausted**: the robot keeps waiting, and the episode is reported once.
+3. *Parameters* (`EndpointParams`, fixed before any validation or test run; not tuned):
+   - $W$ = `wait_steps` = 4, the monitor's $T_{\text{stall}}$, the model's existing bound for "not momentary";
+   - $H$ = `hold_steps` = 8 = $2T_{\text{stall}}$;
+   - $M$ = `max_attempts` = 3;
+   - `retreat_radius` = 8;
+   - `abort_steps` = 4, as the resolver.
+
+**Counters** (`extra["planning"]["endpoint"]`; every event counted once):
+
+| counter | counts |
+|---|---|
+| `blockages_temporary` | blockage episodes that ended before $W$ consecutive waiting steps (counted when they end) |
+| `blockages_persistent` (`_obstacle`, `_robot`) | blockage episodes that reached $W$ (counted once per episode, by occupant kind) |
+| `retreats_started` | retreat attempts, i.e. recovery initiated (one per attempt) |
+| `retreats_succeeded` / `_timed_out` / `_aborted` / `_cancelled` | attempt outcomes; `retreats_started` = their sum + `retreats_active_at_end` |
+| `attempts_exhausted` | persistent episodes whose $M$ attempts were used (once per episode) |
+| `no_retreat_cell` | persistent episodes in which a retreat search found no cell (once per episode; the search is repeated every $W$ steps) |
+| `goal_reached_after_recovery` | robots that reached the goal (pickup or delivery) after a successful retreat for it |
+| `parking_needed` | stays of an idle robot on an active endpoint (once per stay) |
+| `parking_started` / `_completed` / `_cancelled` / `_aborted` | parking trips; `parking_started` = completed + cancelled + aborted + `parkings_active_at_end` |
+| `no_parking_cell`, `parking_blocked_dynamic` | stays without a safe cell (static) / without a reachable one (dynamic), once per stay each |
+| `retreat_robot_steps`, `parking_robot_steps` | robot-steps spent with a retreat / parking goal |
+| `unresolved_obstacle_at_end`, `unresolved_idle_robot_at_end` | persistent blockages still in place when the episode ends |
+| `idle_on_endpoint_at_end` | idle robots standing on an active endpoint at the end |
+
+The E5 diagnostics (`experiments/e5_diagnostics.py`) attach the holder's recovery state to every undelivered `goal_obstacle` / `goal_idle_robot` item. For `goal_idle_robot` items they also attach the occupant's parking state. No undelivered task is left without its recovery outcome.
+
+**Safety (G25, guaranteed, argued against the code).**
+- Endpoint recovery changes only monitor goals, and therefore only suggested actions. It never changes an action, the occupancy rules, the arbiter or obstacle motion.
+- The arbiter's Lemma 3.1 holds for any joint proposal, so no physical collision is possible.
+- The baseline's collision property (G19, §5.3) holds for *arbitrary* suggested actions, so with the baseline there are still no RR, ROs or invalid proposals under its assumptions.
+- The shield, when on, still only replaces moves by `stay`.
+- *Tested:* 0 physical collisions in every endpoint test; 0 RR/ROs/INV for the baseline in every planner × allocator × shield combination of `tests/integration/test_endpoint_integration.py` and `test_cli_matrix.py`; the E5 recovery runs (`05` §B.6).
+
+**Progress (not claimed in general; conditional for the simplest cases).**
+- *Parking:* an idle robot leaves an active endpoint if a safe cell exists and its route is not blocked. Its priority is 0, so busy robots pass first.
+- *Retreat:* it removes the robot from the cells the occupant can enter next.
+  - A *patrol* obstacle whose next shortest-path cell was the robot's then moves on. That cell is never the retreat cell, and is not adjacent to it.
+  - A *random walk* then moves to the freed exit with probability ≥ 1/5 per step.
+  - Neither implies delivery: the obstacle may re-enter the goal, block the corridor between the robot and the goal, or the robot may lose the race for the goal.
+- **Unresolvable cases (reported, not hidden):**
+  - (i) an occupant that never leaves, e.g. a one-waypoint patrol parked on the endpoint (exhausted after $M$ attempts, `unresolved_obstacle_at_end`);
+  - (ii) no retreat cell within the radius, e.g. a 1-wide corridor whose far end is the goal (`no_retreat_cell`);
+  - (iii) no safe parking cell, e.g. a small region whose free cells are all endpoints or cut vertices (`no_parking_cell`), or one reachable only through the waiting robot (`parking_blocked_dynamic`). If that robot also has no retreat cell, both stay (constructed test `NO_PARKING`);
+  - (iv) after a successful retreat, an obstacle that moves into a 1-wide approach corridor and waits for the robot: a robot–obstacle head-on outside the goal, which neither the resolver nor this rule handles;
+  - (v) idle robots blocking *routes* (not endpoints), and contests between busy robots on free cells, are out of scope.
+- *Not claimed:* that every endpoint blockage is resolved, or that every task is delivered.
+
+**Complexity.** Per step: $O(N + K + |J|)$ to build $E(t)$ and track blockages. Each parking search costs one BFS plus one cut-vertex computation (iterative Hopcroft–Tarjan, $O(V)$, cached per grid version and removed set). Each retreat search costs one BFS bounded by the radius. Searches run only on trigger events.
+
+**Tests.**
+- `tests/unit/planning/test_endpoint.py` (21): parameters and validation; active endpoints by status; nearest cell (ties, radius, blocking); cut vertices against a brute-force component count (Hypothesis, 60 grids) and by hand.
+  - *Parking:* nearest safe cell, completion, cancellation, abort and retry, static and dynamic absence, stationary robots and reserved cells.
+  - *Retreat:* temporary vs persistent occupancy, the expected retreat cell, success and restore (T8), timeouts, exhaustion and the end report, no retreat cell, cancellation (goal change, resolver), abort, an idle-robot occupant.
+  - Counter keys and events; parking robot-steps excluded from the deviation-rate denominator (`count_active`).
+- `tests/integration/test_endpoint_integration.py` (31): endpoint reuse after delivery (both controllers; off → `goal_idle_robot`, on → delivered and parked); shared endpoints between tasks; identical pickup/drop-off rejected by the model; no parking and no retreat cell reported; a patrol held on a pickup and on a drop-off (off → `goal_obstacle`, on → retreat succeeds, delivered); a crossing obstacle cleared without recovery; a never-leaving obstacle exhausted and reported; all planner × allocator × controller × shield combinations; E5 development-seed episodes (both controllers, shield off and on): no collision, baseline RR = 0, counter identities; off = the earlier coordinator; determinism with RRT\*.
+- `tests/integration/test_cli_matrix.py`: the 16 combinations with `--endpoint` on and off; option validation and text output.
+- `tests/integration/test_endpoint_evidence.py` (7, one slow): the paired benchmark (identical trajectories, statistics, CLI validation, samples), the recovery E5 configurations, the paired recovery comparison, recovery-aware diagnostics.
+
+**Metric definitions with recovery.** Unchanged. Their measured values can move as follows:
+- `robot_moves` and path efficiency include retreat and parking moves; a retreat, like a T7 detour, stays inside its leg.
+- Wait ratio counts holding at a retreat cell as waiting.
+- Utilisation and plan adherence use robot modes, so parking (an idle robot) is excluded from both.
+- The deviation rate keeps "per 100 non-idle robot-steps": parking steps and their T3 calls are excluded (`RobotInput.count_active`).
+- Mean flow time is still averaged over delivered tasks only, so it can rise when recovery delivers tasks that had waited long.
 
 ---
 

@@ -1,0 +1,38 @@
+# Unresolvable deadlock demo (Issue #4 stage 5B): the same head-on encounter in a single-lane
+# corridor. No cell lies off the other robot's remaining path, so no passing place exists:
+# the resolver reports the deadlock as unresolved ("no_passing_place") and forces nothing.
+# Robots never propose a conflict; no task is delivered. This is a genuine impossibility for
+# any controller that cannot pass through another robot, not a defect.
+#
+#   python -m robocoord simulate --scenario configs/scenarios/headon_single_lane.toml --planner astar --allocator auction
+
+[scenario]
+name = "headon-single-lane"
+description = "Single-lane head-on encounter: reported as an unresolved deadlock"
+seed = 1
+max_steps = 40
+
+[map]
+rows = [
+  "############",
+  "#..........#",
+  "############",
+]
+
+[[robots]]
+start = [1, 1]
+
+[[robots]]
+start = [10, 1]
+
+[[tasks]]
+pickup = [2, 1]
+dropoff = [10, 1]
+priority = 1
+release = 0
+
+[[tasks]]
+pickup = [9, 1]
+dropoff = [1, 1]
+priority = 2
+release = 0

@@ -1,0 +1,43 @@
+# E1a: A* vs RRT* on static queries (05 §B.4).
+# 7 map families × 4 sizes × 5 maps × 20 start–goal pairs = 2 800 queries;
+# planners A* and RRT* (default neighbour index, chosen from E1b) with n_max ∈ {500, 2000, 5000}
+# → 11 200 runs, capped at 30 s per run (a run over the cap is recorded as "timeout").
+#
+#   python -m robocoord experiment --config configs/experiments/e1a_planners_static.toml
+
+[experiment]
+name = "e1a_planners_static"
+kind = "planner_queries"
+description = "A* and RRT* quality, work and scaling on 7 synthetic map families x 4 sizes"
+seed_base = 30000
+timeout_s = 30.0
+workers = 10
+
+[factors]
+family = ["open", "d10", "d20", "d30", "d35", "rooms", "warehouse"]
+size = [16, 32, 64, 128]
+map = [0, 1, 2, 3, 4]
+pair = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+planner = ["astar", "rrtstar-500", "rrtstar-2000", "rrtstar-5000"]
+
+[fixed]
+record_trace = false
+
+[[planners]]
+label = "astar"
+name = "astar"
+
+[[planners]]
+label = "rrtstar-500"
+name = "rrtstar"
+options = { max_iterations = 500 }
+
+[[planners]]
+label = "rrtstar-2000"
+name = "rrtstar"
+options = { max_iterations = 2000 }
+
+[[planners]]
+label = "rrtstar-5000"
+name = "rrtstar"
+options = { max_iterations = 5000 }

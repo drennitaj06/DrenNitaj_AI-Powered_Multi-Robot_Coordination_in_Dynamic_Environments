@@ -1,0 +1,37 @@
+# E2: reactive replanning (05 §B.4). Planner {A*, RRT*} × dynamic obstacles {0, 4, 8, 16} ×
+# map-event rate {none, low} × team {1, 4} × 20 test seeds = 640 episodes.
+# Robots follow the planner's suggested actions (plan follower); tasks come from fixture
+# assignments (3 per robot), as there is no allocator before Issue #4.
+#
+#   python -m robocoord experiment --config configs/experiments/e2_replanning.toml
+
+[experiment]
+name = "e2_replanning"
+kind = "replanning"
+description = "Replanning cost and effectiveness, A* vs RRT*, plan follower"
+seed_base = 20000
+timeout_s = 600.0
+workers = 10
+
+[factors]
+planner = ["astar", "rrtstar"]
+obstacles = [0, 4, 8, 16]
+events = ["none", "low"]
+team = [1, 4]
+seed = [20000, 20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20009,
+        20010, 20011, 20012, 20013, 20014, 20015, 20016, 20017, 20018, 20019]
+
+[fixed]
+size = 24              # 24 x 24 random map, 15% static density
+density = 0.15
+tasks_per_robot = 3
+max_steps = 300        # "low" map-event rate: 6 block events in [5, 150), each lasting 20 steps
+
+[[planners]]
+label = "astar"
+name = "astar"
+
+[[planners]]
+label = "rrtstar"
+name = "rrtstar"
+options = { max_iterations = 1000 }

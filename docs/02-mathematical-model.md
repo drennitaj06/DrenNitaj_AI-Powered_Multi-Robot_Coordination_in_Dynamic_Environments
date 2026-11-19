@@ -52,7 +52,7 @@ A finite set $K$ of dynamic obstacles. Obstacle $k$ has position $z_k(t) \in \ma
 | Bounce | Keep the current direction $\delta_k$; reverse $\delta_k$ when the next cell is blocked |
 | Data-driven (Issue #7, conditional) | Correlated random walk with parameters estimated from trajectory data |
 
-**Obstacle move rule** [Asm A-5]. The proposal is accepted only if it is in bounds and not occupied at time $t$ by a static obstacle, a robot or another dynamic obstacle. Otherwise $z_k(t+1) = z_k(t)$. Obstacles are processed in a fixed index order, so the outcome is deterministic. All randomness comes from the obstacle's own seeded generator. Obstacle moves at step $t$ do **not** depend on the robots' actions at step $t$, only on positions at time $t$. This makes counterfactual conflict evaluation (§9.2) well-defined.
+**Obstacle move rule** [Asm A-5]. The proposal is accepted only if it is in bounds, not occupied at time $t$ by a static obstacle, a robot or another dynamic obstacle, and not already claimed by an earlier obstacle (lower index) in the same step. Otherwise $z_k(t+1) = z_k(t)$. Obstacles are processed in a fixed index order, so the outcome is deterministic. All randomness comes from the obstacle's own seeded generator. Obstacle moves at step $t$ do **not** depend on the robots' actions at step $t$, only on positions at time $t$. This makes counterfactual conflict evaluation (§9.2) well-defined.
 
 **Velocity and prediction.** $v_k(t) = z_k(t) - z_k(t-1)$. The one-step constant-velocity prediction is $\hat z_k(t+1) = z_k(t) + v_k(t)$, kept only if it is a free in-bounds cell. It is a heuristic: obstacles may turn or stop.
 
@@ -147,7 +147,7 @@ A planner returns, for robot $i$ with goal $g_i$, a cell sequence $P_i = (c_0 = 
 For a query by robot $i$ at time $t$, both planners use the **same** constraint sets, built by one shared function:
 
 - Sensed obstacles: $Z_i(t) = \{z_k(t) : \|z_k(t) - x_i(t)\|_\infty \le r_s\}$. Their predictions are $\hat Z_i(t) = \{\hat z_k(t+1) : z_k(t) \in Z_i(t)\}$.
-- **Hard dynamic block set:** $B_i(t) = \big(Z_i(t) \cup \hat Z_i(t)\big) \setminus \{x_i(t),\, g_i\}$. The robot's own cell and its **goal cell are never dynamically blocked**: an obstacle on a pickup or drop-off cell is transient and must not make a task unreachable.
+- **Hard dynamic block set:** $B_i(t) = \big(Z_i(t) \cup \hat Z_i(t)\big) \setminus \{x_i(t),\, g_i\}$. The robot's own cell and its **goal cell are never dynamically blocked**: an obstacle on a pickup or drop-off cell must not make a task unreachable *for the planner*. *(Corrected in the Project Issue #4 endpoint follow-up.)* This does **not** make the occupation transient: under the obstacle move rule (A-5) an obstacle whose next move is the waiting robot's cell never leaves (measured: 61 undelivered E5 tasks). A persistent occupation is handled by endpoint recovery (§5.3, `04` §5.6).
 - **Proximity set:** $Q_i(t) = \{v \in \mathcal{C} : \min_{z \in Z_i(t)} \|v - z\|_1 \le r_{\text{infl}}\}$. If $Z_i(t) = \varnothing$, the minimum is $+\infty$ and $Q_i(t) = \varnothing$. This includes the goal cell when it is near an obstacle.
 - **Cost density** over the plane: $\omega_i(p) = 1 + \lambda_{\text{prox}} \cdot \mathbb{1}[\text{cell}(p) \in Q_i(t)]$, so $1 \le \omega_i \le 1 + \lambda_{\text{prox}}$.
 
@@ -171,6 +171,12 @@ Identical for both planners:
 
 **Occupied goal cells.** When the goal is currently or predictedly occupied by a dynamic obstacle, the goal stays valid. The robot approaches and waits until the cell is free. Waiting is enforced by the shield (if on), by the controller's own choice, or by the arbiter.
 
+**Endpoint recovery** (Project Issue #4 follow-up; on by default with an allocator, `04` §5.6). Waiting alone can last forever: an obstacle never enters the waiting robot's cell (A-5), and an idle robot never leaves an endpoint. Two rules change only the goal the monitor plans to (trigger T8); occupancy, arbitration and obstacle motion are unchanged:
+1. *Retreat.* If robot $i$ has waited $W = T_{\text{stall}}$ consecutive steps adjacent to its task goal $g_i$ while the same occupant (an obstacle, or an idle robot) holds $g_i$, it moves to a free cell at distance ≥ 2 from the occupant and from its own cell. It holds there for at most $H = 2T_{\text{stall}}$ steps, or until $g_i$ is free, and then restores $g_i$. It makes at most $M = 3$ attempts per blockage episode; after that the blockage is reported as exhausted.
+2. *Parking.* An idle robot standing on an endpoint of a released, undelivered task receives a temporary *parking cell*: the nearest free cell that is no active endpoint, not reserved, and not a cut vertex of the free grid. While parking it keeps mode idle, $g_i = \varnothing$ and priority 0. A task assignment cancels parking.
+
+Neither rule is a delivery guarantee (G26); every unresolved case is counted.
+
 ### 5.4 Path monitor and replanning
 
 Robot $i$ follows $P_i$ with progress index $\ell_i$ (it is at $c_{\ell_i}$). After each step:
@@ -188,8 +194,17 @@ Replanning triggers (at most one planner call per robot per step):
 | T4 | **Stall**: valid plan, but $\ell_i$ has not advanced for $T_{\text{stall}}$ consecutive steps while $c_{\ell_i+1}$ is occupied. That cell, unless it is the goal, is added to a per-robot temporary block list for $T_{\text{stall}}$ steps, and the robot replans (detour). | interaction |
 | T5 | Previous call failed and the cooldown $T_{\text{cd}}$ elapsed | retry |
 | T6 | Current plan is `degraded` and $T_{\text{cd}}$ elapsed | retry |
+| T7 | **Deadlock detour** (Issue #4, opt-in resolver, `04` §5.5): the goal is set to a passing cell, or restored from it to the task goal. The leg to the task goal continues across the detour. | deadlock |
+| T8 | **Endpoint recovery** (Issue #4 follow-up, `04` §5.6): the goal is set to a retreat or parking cell, or restored from a retreat cell to the task goal. No leg is closed or started. | endpoint |
+
+T4 is a planning-monitor trigger that replans one stalled robot; it is not a deadlock-resolution rule. Two robots blocking each other both stall, and their T4 replans are symmetric (measured in Issue #4: they meet again even with a second lane). Mutual blocking is handled by the separate resolver of `04` §5.5 (T7). While a detour is active, T4 is suspended for the robots of that cycle.
 
 The monitor is **controller-agnostic**: it applies identically to the baseline, reference-follower and learned controllers. Every planner call is logged with its trigger.
+
+*Clarifications (Issue #3; implementation notes in `04` §5.2).*
+- In T2, "excluding the goal" refers to the dynamic set $B_i$, which never contains the goal anyway. The goal is still checked against $S(t)$ at every step, so that a map event on the goal leads to the `unreachable` policy of §5.3.
+- For a `degraded` plan, T2 checks $S(t)$ only. Dynamic re-checks of degraded plans are made by T6.
+- T4 fires only for an *occupied* next cell and never targets the goal. Two robots contending for the same free cell are frozen by the arbiter without a T4. *Issue #4:* the right-of-way baseline resolves such contests: exactly one claimant moves. Mutual blocking cycles are handled by the deadlock resolver (T7, `04` §5.5).
 
 **Suggested action.** $\hat a_i^{\text{plan}}$ is the action moving from $x_i$ to $c_{\ell_i+1}$, or $\textsf{stay}$ if the robot has no valid plan or is at its goal.
 
@@ -201,7 +216,7 @@ The monitor is **controller-agnostic**: it applies identically to the baseline, 
 |---|---|---|
 | Returned path valid for the **query snapshot** (free of $S(t) \cup B_i(t)$, 4-connected, correct endpoints) | Guaranteed | Guaranteed (discretisation lemma) |
 | Decides reachability on the snapshot | Guaranteed (complete on a finite graph) | Guaranteed via BFS guard (Lemma 5.1); the RRT\* search itself is not complete with a finite budget |
-| Optimal on the snapshot | Guaranteed: minimum $\kappa_i$-cost among 4-connected lattice paths | Conditional: asymptotically optimal ($n \to \infty$) in Euclidean length when $Q_i = \varnothing$ or $\lambda_{\text{prox}} = 0$, under the radius condition of `04` §3. Not claimed for the weighted cost or for finite budgets. Not step-optimal after discretisation. |
+| Optimal on the snapshot | Guaranteed: minimum $\kappa_i$-cost among 4-connected lattice paths | Not claimed. The implemented Karaman–Frazzoli radius ($\propto (\log n/n)^{1/d}$) does not satisfy the corrected asymptotic-optimality condition of Solovey et al. (2020), which needs exponent $1/(d+1)$ (`04` §3.4–3.5). Not claimed for the weighted cost or for finite budgets either. Not step-optimal after discretisation. Convergence is measured empirically (E1c). |
 | Valid at later times | Not claimed: obstacles move, map events occur, other robots are not modelled | Not claimed (same reasons) |
 
 **The executed trajectory is chosen by the controller.** MADQL, PPO, the baseline and the reference follower select $a_i(t)$ freely within the mask. They may follow, wait, yield, side-step or leave the reference path. Planner properties therefore **do not transfer** to executed trajectories or to task completion.
@@ -434,13 +449,26 @@ Avoidance rate $= N^{\text{avoided}} / \sum_t |\mathcal{K}^{\text{ref}}_t|$ (und
 
 It is therefore complemented by the **episode-level paired comparison** with the reference-follower controller on identical seeds (proposed conflicts per 100 robot-steps, flow times). That comparison is the primary safety comparison between controllers. For the reference follower itself, $N^{\text{avoided}} = N^{\text{introduced}} = 0$ by definition.
 
+**Conflict categories per step (X-10, Issue #4).** With the shield, the proposal reaching the arbiter is $a^{\text{arb}}_t$, which may differ from $a^{\text{ctrl}}_t$; let $\mathcal{K}^{\text{arb}}_t = \mathcal{K}(s_t, a^{\text{arb}}_t)$. All sets are computed by the same detector from the same state $s_t$ and the same resolved obstacle moves. None is reconstructed from final positions.
+
+| Category | Definition |
+|---|---|
+| suggested conflict | $e \in \mathcal{K}^{\text{ref}}_t$ ($a^{\text{ref}}$ = the actually suggested actions, masked → stay; recorded per step in the trace as `suggested`) |
+| conflict-free suggestion | $\mathcal{K}^{\text{ref}}_t = \varnothing$ |
+| avoided / introduced / persisted by the controller | $\mathcal{K}^{\text{ref}}_t \setminus \mathcal{K}^{\text{ctrl}}_t$ / $\mathcal{K}^{\text{ctrl}}_t \setminus \mathcal{K}^{\text{ref}}_t$ / $\mathcal{K}^{\text{ref}}_t \cap \mathcal{K}^{\text{ctrl}}_t$ |
+| prevented by the shield | $\mathcal{K}^{\text{ctrl}}_t \setminus \mathcal{K}^{\text{arb}}_t$ (and *introduced by the shield*: $\mathcal{K}^{\text{arb}}_t \setminus \mathcal{K}^{\text{ctrl}}_t$) |
+| prevented by the arbiter | every $e \in \mathcal{K}^{\text{arb}}_t$: the involved moves are cancelled (emergency stop, Lemma 3.1); counted as $N^{\text{prev}}$ |
+| executed | a physical collision after resolution; $0$ by Lemma 3.1, checked every step ($N^{\text{phys}}$) |
+
+Counts: $N^{\textsf{SH}}$, $\sum_t |\mathcal{K}^{\text{ctrl}}_t \setminus \mathcal{K}^{\text{arb}}_t|$ and $\sum_t |\mathcal{K}^{\text{arb}}_t \setminus \mathcal{K}^{\text{ctrl}}_t|$ are reported under `extra["shield"]` when a shield is configured. Note: in this simulator obstacles never enter robot-occupied cells (§2), so a robot–obstacle swap ($\textsf{ROs}$) cannot be proposed.
+
 ### 9.3 Plan-adherence metrics
 
 | Metric | Definition |
 |---|---|
 | Plan adherence | fraction of non-idle robot-steps with a valid plan in which $a_i = \hat a^{\text{plan}}_i$ |
 | Deviation rate | T3 (off-path) events per 100 non-idle robot-steps |
-| Replans by trigger | counts of T1–T6 per episode (planner calls attributed to allocation, environment, controller, interaction, retry) |
+| Replans by trigger | counts of T1–T8 per episode (planner calls attributed to allocation, environment, controller, interaction, retry, deadlock, endpoint; T7 and T8 occur only when their opt-in mechanisms are enabled) |
 | Leg execution ratio | for each completed leg, executed steps $/$ length of the first reference path of that leg; also executed moves $/$ static shortest distance |
 | Planning status mix | fractions `ok`, `ok` + degraded, `unreachable`, `budget_exhausted` |
 
@@ -492,13 +520,24 @@ The RL base reward of §7 is a *scalarisation* of it. The evaluation reports the
 | G4 | A\* path is $\kappa$-optimal and valid for the query snapshot; unreachability correctly reported | **Guaranteed** | `04` §2.2 |
 | G5 | RRT\* path is valid for the query snapshot; best cost non-increasing in iterations | **Guaranteed** | `04` §3 |
 | G6 | Continuous feasibility ⇔ 4-connected grid feasibility under the supercover rule | **Guaranteed** | Lemma 5.1 |
-| G7 | RRT\* asymptotic optimality | **Conditional**: $n \to \infty$, Euclidean cost ($Q_i = \varnothing$ or $\lambda_{\text{prox}} = 0$), radius constant per `04` §3 | Karaman & Frazzoli 2011; Solovey et al. 2020 |
+| G7 | RRT\* asymptotic optimality | **Not claimed for the implemented radius** (revised in Issue #3, see `verification-log.md` V-6; earlier: "Conditional"). The implementation uses the Karaman–Frazzoli radius $\min(\gamma(\log n/n)^{1/d}, \eta)$. Solovey et al. (2020) identified a logical gap in the original optimality proof and proved asymptotic optimality (Euclidean cost) for $\gamma(\log n/n)^{1/(d+1)}$ with a stated lower bound on $\gamma$. The implemented exponent $1/d$ does not meet that condition for any constant. Finite-budget convergence is measured (E1c). | Karaman & Frazzoli 2011 (Thm 38, original radius); Solovey, Janson, Schmerling, Frazzoli & Pavone 2020 (arXiv:1909.09688, Thm 1, corrected radius) |
 | G8 | RRT\* finds a path within a finite budget | **Not claimed** (measured: success rate) | — |
 | G9 | RRT\* runtime $O(n \log n)$ | **Not claimed**. Unconditional and conditional bounds in `04` §3.6 | — |
-| G10 | Auction returns a maximum-cardinality matching, optimal for integer benefits (within $k\varepsilon$ for fixed $\varepsilon$) | **Guaranteed** | `04` §4.1, §8 |
+| G10 | Auction returns a maximum-cardinality matching, optimal for integer benefits (fixed $\varepsilon$: additive bound $V \ge \mathrm{OPT} - k\varepsilon$ only, **no relative-error guarantee**) | **Guaranteed** (tested against the Hungarian oracle; E3a: 280/280 optimal, every fixed-ε gap ≤ k) | `04` §4.1, §8 |
 | G11 | Higher-priority tasks always assigned first | **Not claimed** (weighted priority, §8.1) | — |
 | G12 | Aging properties P1, P2, P3 | **Guaranteed** | §4 |
 | G13 | Starvation freedom | **Not claimed**; mitigation measured in E3 | §4 |
 | G14 | Shaping preserves optimal policies and equilibria | **Guaranteed** for terminating episodes; **Conditional** (continuing objective) under truncation | §7.1 |
 | G15 | Reference-planner optimality or completeness carries over to executed trajectories or task completion | **Not claimed** | §5.5 |
 | G16 | Learned policies converge, cooperate, or outperform baselines | **Not claimed** a priori; established or refuted only by experiments | `05` Part B |
+| G17 | Sequential auction: $2V \ge \mathrm{OPT}$ on the offset-inclusive integer objective; maximal matching. Under the connected-component assumption (CC): maximum cardinality and $V \ge \frac{k-1}{k+1}\mathrm{OPT}$. Neither holds in original (unshifted) units. | **Guaranteed** (½); **Conditional** on CC (cardinality, ratio) | `04` §4.2 (proofs, assumptions, counter-examples) |
+| G18 | Keep-current tie-break (`prefer_current`): an optimum of $(k+1)A + E$ is an optimum of $A$ keeping the most current assignments, so no switch at gain $= h$ | **Guaranteed** | `04` §4.3 notes |
+| G19 | Right-of-way baseline (all robots on it, same view): no $\textsf{RR}$ conflict, no $\textsf{ROs}$, no invalid move; no conflict at all if obstacles stay or keep their velocity and $r_s \ge 2$ | **Guaranteed** under these assumptions (property-tested) | `04` §5.3 |
+| G20 | Baseline or deadlock resolver guarantees progress / task completion | **Not claimed**. Conflict-free ≠ deadlock-free. Without endpoint recovery, idle robots are not parked, and a robot waiting for an obstacle that occupies its goal (robot–obstacle goal deadlock: obstacles never enter robot cells, §2; the occupied-goal policy is to wait, §5.3) is handled by neither. Measured in the preliminary E5 without recovery: 89 of 91 undelivered baseline tasks. With recovery see G26. | `04` §5.3 (limitations 3, 6), §5.5; `05` §B.6 |
+| G21 | Deadlock detour preserves G19 (it changes only goals, never actions) | **Guaranteed** | `04` §5.5 |
+| G22 | A *detected* two-robot deadlock with a passing cell is resolved | **Conditional** on R1–R9 (`04` §5.5, including planner success, which holds for A\* and not for RRT\*'s finite budget, and both robots on the baseline); verified on constructed instances. Only robot–robot wait-for cycles are detected; blocking by idle robots or obstacles is not. Every deadlock resolvable: **Not claimed** (single-lane counter-example). Cycles of ≥ 4 robots: **Not claimed** in general (one constructed geometry tested). | `04` §5.5 |
+| G23 | Shield: never creates a move, so the shielded robot is never at fault in a conflict it causes; removes RO conflicts of moving robots | **Guaranteed** (never at fault); RO removal **Conditional** (constant-velocity obstacles, $r_s \ge 2$); RR conflicts out of scope | `04` §5.4 |
+| G24 | Reference follower: $N^{\text{avoided}} = N^{\text{introduced}} = 0$ and $\mathcal{K}^{\text{ctrl}}_t = \mathcal{K}^{\text{ref}}_t$ (X-10) | **Guaranteed** (by definition; tested in every planner × allocator × shield combination) | §9.2, `04` §5.3 |
+| G25 | Endpoint recovery preserves G1, G19 and the shield's G23 (it changes only monitor goals, never actions, occupancy or obstacle motion) | **Guaranteed** (argument in `04` §5.6; 0 physical collisions and, for the baseline, 0 RR/ROs/INV in every test and E5 recovery run) | `04` §5.6 |
+| G26 | Endpoint recovery delivers every task whose endpoint is held | **Not claimed.** A parking cell or retreat cell may not exist; the occupant may never leave (one-waypoint patrol); after a retreat an obstacle may block a 1-wide approach. Each case is counted (`attempts_exhausted`, `no_retreat_cell`, `no_parking_cell`, `parking_blocked_dynamic`, `unresolved_*_at_end`). Effect measured in E5. | `04` §5.6; `05` §B.6 |
+| G27 | Distance optimisations O1/O2 and symmetric reuse return the same distances and reachability as before | **Guaranteed** (BFS distances are independent of the neighbour expansion order; $D < \infty$ ⇔ same component on an undirected graph; $D$ symmetric). Property-tested against the legacy implementation; identical E5-workload trajectories before/after in the benchmark. | `04` §2.1 |

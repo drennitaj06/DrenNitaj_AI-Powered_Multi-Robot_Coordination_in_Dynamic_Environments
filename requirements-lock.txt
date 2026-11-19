@@ -1,0 +1,28 @@
+# Exact versions verified on Windows 11 / Python 3.14.3 (Issue #2). Install: pip install -r requirements-lock.txt -e .
+# numpy is pinned to 2.4.6: on the development machine, Windows Application Control blocked
+# numpy 2.5.5's random/_philox extension (an OS policy issue, not a compatibility issue).
+# hypothesis is pinned to 6.155.7 (Issue #4), the newest pure-Python release: from 6.156.1 on it
+# ships a compiled _native module that Windows Application Control blocks on the same machine.
+# scipy (Issue #4) is a test/experiment oracle only (Hungarian assignment, Wilcoxon).
+# hypothesis and scipy are pinned identically in pyproject.toml, so CI resolves the same versions.
+# numpy is NOT: CI resolves the newest numpy satisfying "numpy>=2.0" (see docs/03-architecture.md
+# §3.3); recorded experiments use this lock file and store their numpy version in env.json.
+ast_serialize==0.13.1
+colorama==0.4.6
+coverage==7.17.3
+hypothesis==6.155.7
+iniconfig==2.3.1
+librt==0.16.0
+mypy==2.4.1
+mypy_extensions==1.2.0
+numpy==2.4.6
+packaging==26.3
+pathspec==1.1.1
+pluggy==1.7.0
+Pygments==2.21.0
+pytest==9.2.0
+pytest-cov==7.1.0
+ruff==0.17.5
+scipy==1.18.1
+sortedcontainers==2.4.0
+typing_extensions==4.16.0

@@ -1,0 +1,24 @@
+# E1c: RRT* convergence (05 §B.4): 20 queries, n up to 20 000, best cost per iteration.
+# On open maps the exact Euclidean optimum is known (centre of the start cell to the goal
+# square), so the optimality gap is exact; on 20% density maps the A*/BFS values are references.
+#
+#   python -m robocoord experiment --config configs/experiments/e1c_convergence.toml
+
+[experiment]
+name = "e1c_convergence"
+kind = "planner_queries"
+description = "RRT* best-cost convergence up to 20000 iterations on 32x32 maps"
+seed_base = 32000
+timeout_s = 600.0
+workers = 10
+
+[factors]
+family = ["open", "d20"]
+size = [32]
+map = [0, 1]
+pair = [0, 1, 2, 3, 4]
+n_max = [20000]
+index = ["kdtree"]
+
+[fixed]
+checkpoints = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]

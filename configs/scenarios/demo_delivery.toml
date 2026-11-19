@@ -1,0 +1,86 @@
+# Scripted demo: 3 robots deliver 4 tasks in a small warehouse while two obstacles move
+# and a corridor cell is blocked by a map event. Robots follow hand-written action scripts;
+# the arbiter stops any move that would collide, and the robot retries on the next step.
+#
+#   python -m robocoord simulate --scenario configs/scenarios/demo_delivery.toml
+
+[scenario]
+name = "demo-delivery"
+description = "Scripted 3-robot pickup-and-delivery demo with moving obstacles and a map event"
+seed = 7
+max_steps = 60
+num_priorities = 3
+
+[map]
+# first row = top of the screen (largest y); '#' wall, '.' free
+rows = [
+  "############",
+  "#..........#",
+  "#..##..##..#",
+  "#..........#",
+  "#..##..##..#",
+  "#..........#",
+  "############",
+]
+
+[[robots]]
+start = [1, 1]
+
+[[robots]]
+start = [10, 1]
+
+[[robots]]
+start = [10, 5]
+
+[[obstacles]]          # shuttles up and down column 9
+start = [9, 2]
+model = "bounce"
+direction = "up"
+
+[[obstacles]]          # patrols the left column
+start = [1, 2]
+model = "patrol"
+waypoints = [[1, 2], [1, 5]]
+
+[[tasks]]              # task 0
+pickup = [3, 1]
+dropoff = [9, 3]
+priority = 2
+release = 0
+
+[[tasks]]              # task 1
+pickup = [8, 1]
+dropoff = [2, 5]
+priority = 3
+release = 0
+
+[[tasks]]              # task 2 appears at t = 4
+pickup = [5, 5]
+dropoff = [10, 1]
+priority = 1
+release = 4
+
+[[tasks]]              # task 3 appears at t = 10
+pickup = [2, 1]
+dropoff = [10, 5]
+priority = 2
+release = 10
+
+[[map_events]]
+time = 15
+cell = [6, 3]
+action = "block"
+
+[[map_events]]
+time = 24
+cell = [6, 3]
+action = "unblock"
+
+[script]
+# per robot: U/D/L/R moves, S = stay; spaces are ignored (used here to separate route legs)
+actions = [
+  "RR RRUURRRR R",                    # robot 0: pickup (3,1) -> deliver (9,3) -> step aside
+  "LL LLUUUULLLL DDDD RRRUUUURRRRR",  # robot 1: task 1, then task 3
+  "LLLLL DDDD RRRRR",                 # robot 2: task 2
+]
+assignments = [[0], [1, 3], [2]]

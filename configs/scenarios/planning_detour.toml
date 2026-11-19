@@ -1,0 +1,69 @@
+# Planning demo (Issue #3): robots follow A* or RRT* reference paths and replan reactively.
+# A map event closes the bottom corridor in front of robot 0 (trigger T2, detour), an obstacle
+# shuttles across all three corridors in column 7 (T2 when it is sensed ahead on the path), and a
+# second map event briefly blocks robot 1's drop-off cell (status `unreachable`: the robot holds
+# its picked task, waits and retries with trigger T5 until the cell is unblocked).
+#
+#   python -m robocoord simulate --scenario configs/scenarios/planning_detour.toml --planner astar
+#   python -m robocoord simulate --scenario configs/scenarios/planning_detour.toml --planner rrtstar
+
+[scenario]
+name = "planning-detour"
+description = "Two robots with reference planning, a corridor closure and a blocked goal"
+seed = 3
+max_steps = 80
+
+[map]
+rows = [
+  "##############",
+  "#............#",
+  "#.####..####.#",
+  "#............#",
+  "#.####..####.#",
+  "#............#",
+  "##############",
+]
+
+[[robots]]
+start = [1, 1]
+
+[[robots]]
+start = [12, 5]
+
+[[obstacles]]          # shuttles up and down column 7, crossing every corridor
+start = [7, 2]
+model = "bounce"
+direction = "up"
+
+[[tasks]]              # task 0 (robot 0): along the bottom corridor, then to the top-left
+pickup = [12, 1]
+dropoff = [1, 5]
+priority = 2
+release = 0
+
+[[tasks]]              # task 1 (robot 1): pickup in the middle corridor, drop-off bottom-left
+pickup = [10, 3]
+dropoff = [2, 1]
+priority = 3
+release = 0
+
+[[map_events]]         # closes the bottom corridor just ahead of robot 0
+time = 3
+cell = [5, 1]
+action = "block"
+
+[[map_events]]         # robot 1's drop-off cell is blocked for a while ...
+time = 8
+cell = [2, 1]
+action = "block"
+
+[[map_events]]         # ... and released again
+time = 20
+cell = [2, 1]
+action = "unblock"
+
+[script]
+# no action scripts are needed with --planner (robots follow the planner); the fixture task
+# assignments below give each robot its goals. Without --planner the robots stay in place.
+actions = ["", ""]
+assignments = [[0], [1]]

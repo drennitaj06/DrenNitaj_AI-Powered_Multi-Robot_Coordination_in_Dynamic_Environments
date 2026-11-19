@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robocoord"
+version = "0.1.0"
+description = "AI-powered multi-robot coordination in dynamic environments (DAA course project)"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+# Runtime dependencies are added in the issue that first needs them
+# (torch: Issue #5, pandas/matplotlib: experiments, pygame-ce: Issue #8).
+dependencies = ["numpy>=2.0"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    # Exact pin, identical in CI and locally (Issue #4): 6.155.7 is the newest pure-Python
+    # release; from 6.156.1 on hypothesis ships a compiled module that Windows Application Control
+    # blocks on the development machine. See docs/verification-log.md.
+    "hypothesis==6.155.7",
+    # Test and experiment oracle only (Hungarian assignment, Wilcoxon); never the allocator.
+    "scipy==1.18.1",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[project.scripts]
+robocoord = "robocoord.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+robocoord = ["py.typed"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # unicode symbols (×, ≤, ε) are intentional in docs/strings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N802", "N806"]
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+files = ["src/robocoord"]
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The default run is the fast suite; `pytest -m "slow or training or e2e"` runs the long suite.
+addopts = "-ra --strict-markers -m 'not slow and not training and not e2e'"
+markers = [
+    "slow: long-running tests (excluded from the default fast suite)",
+    "training: RL training runs (excluded from the default fast suite)",
+    "e2e: end-to-end CLI tests in a subprocess (excluded from the default fast suite)",
+]
+
+[tool.coverage.run]
+source = ["robocoord"]
+branch = true
