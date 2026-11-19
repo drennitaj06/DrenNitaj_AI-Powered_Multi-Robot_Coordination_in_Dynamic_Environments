@@ -505,3 +505,143 @@ Central, chronological record of **executed** verification: automated test runs,
 - **Offline regression: endpoint off equals the stored pre-recovery records** (evidence outside the repository tests; the script is in the session scratchpad and is not committed). Every 12th stored record of each half (100 of the 1 200 no-recovery records) was replayed with the `endpoint` key absent. Steps, released and delivered tasks, robot moves, conflicts, physical collisions, mean flow time and makespan matched the stored values in all 100 episodes (0 mismatches). The repository test `test_endpoint_off_equals_absent_key_and_adds_no_recovery` checks only that explicit `"off"` equals the absent key, not this comparison.
 - **Documentation cleanup (comments and documents only, no algorithm change):** stale T1–T6 and "no deadlock detour / no parking" statements corrected in `control/baseline.py`, `planning/{deadlock,monitor}.py`, `tests/unit/planning/test_monitor.py`, `tests/integration/test_baseline_integration.py`, `docs/{01,02,03}`; FR-PLAN-4 annotated with the Issue #4 triggers without changing the requirement; the E5 run totals (1 200 without recovery, 2 400 in all) made explicit in `docs/05` and `docs/07`; the endpoint-off test renamed and its docstring corrected.
 - **Not verified here:** a CI run; other hardware; the final code on battery power.
+
+### V-12 — Issue #5 preparation: optional PyTorch (`marl` extra), CPU-only installation and CI configuration (2026-11-19)
+- **Scope:** dependency and CI configuration only. No source file, test, scenario, experiment configuration or result was changed. No Git operations were run by Claude.
+- **Approvals (student, 2026-11-19, in chat):** (1) read-only investigation of PyTorch CPU wheel availability; (2) a trial in a disposable virtual environment outside the repository; (3) installation of `torch==2.15.0` CPU into the project `.venv` only; (4) the repository changes below, with a separate lock file for the MARL packages. The local installation and the repository change were approved separately.
+- **Environment:** Windows 11 (build 26300), AMD64, CPython 3.14.3, pip 26.3 in the project `.venv`. Project `.venv` versions: numpy 2.4.6, scipy 1.18.1, hypothesis 6.155.7, torch 2.15.0+cpu.
+- **Wheel availability** (read-only, `pip install --dry-run`, `--only-binary`):
+  - CPU index, Windows: `torch-2.15.0+cpu-cp314-cp314-win_amd64.whl`.
+  - CPU index, Linux x86_64: `torch-2.15.0+cpu-cp312/cp313/cp314-…-manylinux_2_28_x86_64.whl`.
+  - Metadata `Requires-Python >=3.11`, compatible with `requires-python = ">=3.12,<3.15"`.
+  - PyPI only, Linux: the wheel `torch-2.15.0-…-manylinux_2_28_x86_64.whl` (no `+cpu`). The PyPI metadata of torch 2.15.0 lists `cuda-toolkit==13.2.2`, `nvidia-cudnn-cu13`, `nvidia-nccl-cu13`, `nvidia-nvshmem-cu13`, `nvidia-cusparselt-cu13`, `cuda-bindings` and `triton` for Linux. This is why the CPU index is required (`03` §3.4).
+- **Disposable trial** (virtual environment in the session scratchpad, outside the repository, deleted afterwards; pip 25.3). Installed: torch 2.15.0+cpu, filelock 4.2.12, fsspec 2026.9.0, Jinja2 3.1.6, MarkupSafe 3.0.4, mpmath 1.3.0, networkx 3.7, setuptools 84.2.1, sympy 1.14.0, typing_extensions 4.16.0 (numpy 2.4.6 added afterwards for the interoperability check).
+  - `import torch` succeeded (Windows Application Control blocked nothing); `torch.cuda.is_available()` False, `torch.version.cuda` None.
+  - Forward and backward pass of a 356→256→256→5 MLP on a batch of 32: output (32, 5), finite loss, non-zero gradients.
+  - With `torch.set_num_threads(1)`, `set_num_interop_threads(1)` and `torch.use_deterministic_algorithms(True)`, two identical seeded 20-step Adam runs (Huber loss, gradient clip 10) produced bitwise-identical weights (same machine and process).
+  - Warnings: "Failed to initialize NumPy" at import while the venv had no NumPy (expected; absent after numpy 2.4.6 was installed, and `from_numpy`/`.numpy()` then worked); a `UserWarning` from the test script's own `float()` on a tensor with `requires_grad`; a pip "new release available" notice.
+  - The project's 159 files (excluding `.venv`, `.git`, caches, `results`) had identical SHA-256 hashes before and after the trial.
+- **Installation in the project `.venv`:** `pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple torch==2.15.0 numpy==2.4.6 scipy==1.18.1 hypothesis==6.155.7`. Nine packages were added (torch 2.15.0+cpu and the eight dependencies listed in `03` §3.4); `typing_extensions` was already present. A before/after `pip list` comparison shows **no existing package changed**. `pip check` reports no broken requirements. The import, CPU-only, NumPy-interoperability, forward/backward and deterministic one-thread checks were repeated in the project `.venv` with the same results and no import-time warnings.
+- **Dependency configuration changes:**
+  - `pyproject.toml`: new optional extra `marl = ["torch==2.15.0"]`; the base dependency stays `numpy>=2.0`; `dev`, `requires-python` and the numpy, scipy and hypothesis pins unchanged.
+  - New `requirements-lock-marl.txt`: `--extra-index-url https://download.pytorch.org/whl/cpu`, `-r requirements-lock.txt`, `torch==2.15.0+cpu` and its eight dependencies.
+  - `requirements-lock.txt`: two header comment lines pointing to the MARL lock; no pin changed.
+  - `.github/workflows/tests.yml` (`tests` job): installs `.[dev,marl]` with the CPU index, then a new step runs `python -c "import torch; assert torch.version.cuda is None, torch.version.cuda; print(torch.__version__)"`. This **CPU-only guard** fails the job if a CUDA build of torch is installed. The `quality` job is unchanged.
+- **Dry-run resolutions** (`pip install --dry-run --ignore-installed --report`, against a copy of the project in the scratchpad, Windows 11 / Python 3.14.3):
+
+  | Command | Result |
+  |---|---|
+  | `pip install -e .` | 2 packages (numpy 2.5.5, robocoord); no torch, nvidia, cuda or triton |
+  | `pip install -r requirements-lock.txt -e .` | 20 packages; numpy 2.4.6, scipy 1.18.1, hypothesis 6.155.7; no torch, nvidia, cuda or triton |
+  | `pip install -e ".[dev,marl]" --extra-index-url <CPU index>` (the CI command) | 29 packages; `torch==2.15.0+cpu`; numpy 2.5.5; no nvidia, cuda or triton |
+  | `pip install -r requirements-lock-marl.txt -e ".[marl]"` | 29 packages; `torch==2.15.0+cpu`; numpy 2.4.6; no nvidia, cuda or triton |
+  | `pip install -e ".[marl]"` without the index (unsupported, shown for contrast) | 12 packages; `torch==2.15.0` from PyPI |
+
+  - Linux, Python 3.12, 3.13 and 3.14: `pip install --dry-run --no-deps --platform manylinux_2_28_x86_64 --python-version <v> --target <scratch>` with the CPU index as extra index selected `torch-2.15.0+cpu-cp<v>-…-manylinux_2_28_x86_64.whl`; without it the plain PyPI wheel. The `.metadata` files of the three Linux CPU wheels were read: their unconditional dependencies are filelock, typing-extensions, setuptools, sympy, networkx, jinja2 and fsspec, with no CUDA, nvidia or triton entry. **These are wheel-selection and metadata checks. Nothing was installed on Linux and no Linux runtime test was run.**
+- **Quality gates** (project `.venv`, after the configuration changes): `ruff check .` passed · `ruff format --check .`: 127 files already formatted (V-11 recorded 126; the difference of one file is not explained by a recorded cause; the file list of the current run is given below) · `mypy src/robocoord`: no issues in 62 source files.
+  - File list of the 127 (`ruff format --check . --verbose`, ruff 0.17.5, run after the documentation edits of this entry): `format_path` was called for **116 Python files** (the number `ruff check --show-files .` also reports for `.py`) and **11 Markdown files** (the ten files in `docs/` and the root `README.md`). The 126 recorded in V-11 was not accompanied by a file list, so whether it also contained ten Markdown files was not checked; the cause of the difference between 126 and 127 is therefore **not established**.
+- **Fast suite** (`pytest -q -p no:cacheprovider --cov=robocoord`): **650 passed, 36 deselected**, 676.72 s (0:11:16), coverage total **96 %** (6 419 statements, 211 missed). An earlier run on the same environment, before the configuration changes and after the torch installation, gave 650 passed, 36 deselected, 283.31 s, 96 %. The difference in duration was not investigated.
+- **Long suite:** not re-run. No source or test file changed and no module imports torch yet. The last recorded result is 36 passed (V-11).
+- **Git state:** `.git/HEAD` read as `refs/heads/develop`; no Git command was run by Claude.
+- **Known limitations / open problems:**
+  - The GitHub Actions workflow with the new install and guard steps has **not been run**.
+  - Python 3.12 and 3.13 are not installed on the development machine. The full dependency resolution and the tests were **not** run on them. Only the Linux wheel selection and metadata above cover those versions.
+  - Runtime compatibility of torch 2.15.0 with the NumPy that CI resolves (2.5.5) was **not tested**. The local trial and installation used NumPy 2.4.6.
+  - Linux and Windows-on-3.12/3.13 installation and runtime behaviour were not tested.
+  - The slow and e2e suites were not re-run because no source code changed.
+  - Torch determinism was shown only as bitwise-identical repeated runs on this machine, with one thread, for one small network. Throughput of simulation plus training is unmeasured; the Double-DQN gather/scatter operations under deterministic mode are untested.
+
+### V-13 — Documentation: experiment terminology and seed blocks for Issues #5 and #6 (2026-11-19)
+- **Scope:** documentation only. No code, test, configuration or result was changed. No Git operations were run by Claude.
+- **Clarification of historical terminology.** V-8 to V-11, GitHub issue #8 and the stored file and directory names call the non-learned runs of Project Issue #4 "preliminary E5" or "E5". Under the approved eight-issue experiment mapping, E5 and E6 belong exclusively to plan Issue #8. These runs are now called the **Issue #4 system comparison**. The V-8 to V-11 entries are historical records and are not rewritten. The names `e5_prelim*`, `e5_recovery*`, `e5_scenario` and `e5_diagnostics.py` are file, directory and function names, not experiment labels.
+- **Seed blocks** (`05` §B.1): the validation range is split into block A (10 000–10 019, periodic validation and checkpoint selection) and block B (10 020–10 099, development comparisons in Issues #5 and #6 after configuration freeze, never used for selection or tuning). Test seeds 20 000–20 999, including 20 200–20 249, are reserved for the official E5 and E6 evaluation in Issue #8. The Issue #4 system comparison already used 20 200–20 249 (and E3b used 20 100–20 129) without tuning on them.
+- **Plan changes:** acceptance criterion 3 of Issue #5 now reads "paired held-out development comparisons (validation block B)"; the E4 row in `05` §B.4 states that Issues #5 and #6 evaluate final policies on block B.
+- **Decisions recorded for Issue #5 (student, 2026-11-19):** checkpoint selection over the 60 block-A A\* episodes is lexicographic — maximum overall task completion rate, then maximum mean discounted base return (potential-based shaping excluded); both metrics are reported overall and per scenario level. Training root seeds are 1, 2 and 3, with the same scenario-sampling sequence across runs and independent algorithmic random streams.
+- **Files changed:** `docs/02`, `docs/03`, `docs/04`, `docs/05`, `docs/07`, this log.
+
+### V-14 — Issue #5 implementation: multi-agent environment, MADQL, training pipeline and learned controller (2026-11-19)
+- **Scope:** implementation and verification of Issue #5 as approved by the student on 2026-11-19 (design final; selection rule and run seeds as in V-13). PPO (Issue #6) and E5/E6 (Issue #8) are not part of it. No Git operations were run by Claude. `docs/SESSION_HANDOFF.md` was not modified: SHA-256 `ba4a439c…5fa3` before and after.
+- **Environment:** Windows 11 (build 26300), 12 logical CPUs, CPython 3.14.3, NumPy 2.4.6, SciPy 1.18.1, Hypothesis 6.155.7, torch 2.15.0+cpu, ruff 0.17.5.
+- **New code:** `src/robocoord/marl/`.
+  - NumPy only: `config`, `observation`, `reward`, `global_state`, `scenarios`, `env`, `vector_env`, `replay`.
+  - Torch: `networks`, `madql`, `checkpoint`, `policy`, `trainer`.
+  - Torch imported lazily: `evaluation` (learned controllers only).
+  - `devcompare`.
+  - Configs: `configs/training/madql.toml` and `madql_smoke.toml`.
+- **Changed code:**
+  - `sim/view.py`: optional `reference_paths` and `goal_distance` fields.
+  - `sim/coordinator.py`: `PathReporting` protocol.
+  - `planning/coordinator.py`: `reference_paths(limit)`.
+  - `sim/engine.py`: opt-in `view_extras` and `path_limit`.
+  - `cli.py`: `--controller madql`, `--checkpoint`, and the `train` subcommand.
+  - `.github/workflows/tests.yml`: the `quality` job installs `.[dev,marl]` with the CPU index, because mypy needs torch's types.
+  - Without view extras the engine's traces are byte-identical to before (`tests/integration/test_view_extras.py`, A\* and RRT\*).
+- **New tests:**
+  - `tests/unit/marl/` (`test_observation.py`, `test_reward.py`, `test_madql.py`, `test_devcompare.py`);
+  - `tests/integration/` (`test_view_extras.py`, `test_marl_env.py`, `test_marl_training.py`, `test_marl_learning_sanity.py`, marked `training`);
+  - `tests/e2e/test_train_subprocess.py`.
+
+  They cover:
+  - `04` §6 tests 1–6 (test 6 is the chain-MDP sanity check plus the `training`-marked test against a random policy);
+  - `04` §8 tests;
+  - X-1 with the learned controller (A\* and RRT\* × shield off and predictive);
+  - X-7 (round-trip, sidecar, tamper check);
+  - X-13 (telescoping with β ∈ {0, 0.3, 1} on terminated and truncated episodes; zero potential at termination);
+  - truncation look-ahead equivalence and termination precedence;
+  - seed-block enforcement.
+
+  No existing test was changed or weakened.
+- **Step budget decision (cited in `04` §6):**
+  - A 40 000-step trial of the full configuration ran alone on this machine (curriculum fractions as approved, validation off). It took 133.2 s wall time, 26.5 s of which was the final block-A validation, with 9 186 gradient updates.
+  - Interval throughput fell from 554 steps/s (stage 1, before learning updates dominate) to 245–327 steps/s in stage 3.
+  - With three runs sharing the machine, 1 000 000 environment steps per run was chosen. That is about 2 h per run at the measured rates, including periodic validation.
+  - Measured afterwards in the real runs: 183–193 training steps/s per run (validation excluded) and 7 176–7 581 s wall time per run.
+  - The trial configuration and output are in the session scratchpad and are not committed.
+- **Quality gates** (after all changes): `ruff check .` passed. `ruff format --check .`: 153 files already formatted (Python and Markdown). `mypy`: no issues in 78 source files.
+- **Fast suite** (`pytest -q -p no:cacheprovider --cov=robocoord`): **809 passed, 45 deselected**, 274.16 s, total coverage **95 %** (7 719 statements, 307 missed).
+  - An earlier run of the same suite, while the three trainings ran in parallel, gave 808 passed, 43 deselected, 699.84 s, 94 %. That was before the two learning-sanity tests and the cp1252 regression test were added.
+  - Before Issue #5 the suite gave 650 passed, 96 % (V-12).
+  - Per-module coverage of the new torch modules in this run: `trainer` 85 %, `madql` 86 %, `evaluation` 87 %, `devcompare` 82 %, `checkpoint` 96 %, `policy` 98 %. Their long-run paths are exercised by the `slow`, `e2e` and `training` tests rather than by the fast suite.
+- **Long suite** (`pytest -p no:cacheprovider -m "slow or e2e or training"`): **45 passed, 809 deselected** in 166.54 s. The learning-sanity test took 33.4 s for run seed 1 and 32.1 s for run seed 2.
+- **Defects found and fixed during verification:**
+  1. `python -m robocoord.marl.devcompare` exited with code 1 **after** writing every result file. Printing the summary's "−" to a redirected Windows (cp1252) console raised `UnicodeEncodeError`. The fix replaces unencodable characters on console output only. The regression test is `test_main_prints_the_summary_on_a_cp1252_console`.
+  2. `docs/03` §5 contained a backspace character in place of `\b` in `$\bar D$`. It was introduced by an Issue #5 documentation edit and is now corrected. The same cause, an escape sequence interpreted by the editing script, had turned the opening backtick and the `r` of `ruff` in the V-12 file-list note into a carriage return. That note is restored to its intended text (`ruff format --check . --verbose`); its content is otherwise unchanged. A scan of 178 text files (`docs`, `src`, `tests`, `configs`, `README.md`, `pyproject.toml`, the MARL lock and the workflow) now finds no control character, tab or lone carriage return.
+  3. `ruff format` reformats Python code blocks in Markdown and flagged a comment spacing in `docs/03` §6; corrected.
+  4. `docs/03` §3.4 still said the torch-import rule was "not yet implemented"; it now describes the implementation.
+- **Not verified here:**
+  - a GitHub Actions run, including the changed `quality` job;
+  - Linux, and Python 3.12 and 3.13;
+  - peak process memory of training (the replay buffer alone is 160.2 MB by `ReplayBuffer.nbytes`);
+  - determinism across machines (shown only on this machine with one torch thread).
+
+### V-15 — Issue #5 results: MADQL training (E4, MADQL part) and the block-B development comparison (2026-11-19)
+- **Training runs:**
+  - Command: `for s in 1 2 3; do python -m robocoord train --config configs/training/madql.toml --seed $s --out results/training/madql_seed$s; done`, run concurrently.
+  - All three reached 1 000 000 environment steps. Their logs contain no error or warning.
+  - The background shell that launched them reported exit code 1. That came from a trailing `tail` display command in the wrapper, not from a training process: all three `summary.json` files, the checkpoints and the validation logs are complete.
+- **Selection verified by recomputation:**
+  - For each run, the lexicographic maximum over `validation.jsonl` equals the step recorded in `best.json`: 800 000, 1 000 000 and 700 000.
+  - The SHA-256 of each `best.pt` matches its sidecar, and its weights are tensor-identical to the selected step checkpoint. The file bytes differ only through torch's archive serialisation.
+
+  | run seed | selected step | `best.pt` SHA-256 | config hash |
+  |---|---|---|---|
+  | 1 | 800 000 | `dd9f088c2bfe807844579548e7603751b6041de10c74532d422a40b92f31ce83` | `3ffb73239e1a48d0` |
+  | 2 | 1 000 000 | `c66bd8c2d606e70586e639027d5a15987b302e799bfe022e060034d9524f6856` | `59fee33cc03bf89a` |
+  | 3 | 700 000 | `492f2a61d23a5ed1bbf0dfd5847c59988d87fed94108ee0890ac7ab67a657258` | `fa1ea5b4509dd8a0` |
+
+  The configuration hashes differ only through `run_seed`, which is part of the hashed configuration.
+- **Seed hygiene (checked from the stored records):**
+  - Training episodes used seeds 6–9 993.
+  - Validation used 10 000–10 019.
+  - The development comparison used 10 020–10 099.
+  - No seed in 20 000–20 999 appears in any record.
+- **Development comparison:**
+  - `python -m robocoord.marl.devcompare … --workers 10`, run **once** after selection: 1 500 episodes in 2 109 s.
+  - Its process also exited with code 1, after writing `manifest.json`, all 1 500 records, `analysis.json` and `summary.md`. The cause is defect 1 of V-14; the results were not re-run or changed.
+- **Results** (details in `05` §B.6, E4 and the Issue #5 development comparison):
+  - Block-A selected completion: 0.715, 0.635 and 0.631.
+  - On block B, MADQL completes fewer tasks than the baseline (pooled −0.41 with A\*, −0.31 with RRT\*) and than the reference follower (−0.32, −0.21). This is a **negative result** for completion.
+  - It proposes 13–16 fewer conflicts per 100 robot-steps than the reference follower.
+  - Its per-step conflict rate against the baseline is not clearly different and is confounded by episode length.
+  - 0 physical collisions in all training, validation and comparison episodes.
+- **Storage:** results (192 MB of training output, plus the comparison) are local and git-ignored. No checkpoint was committed or placed in `models/` (ADR-9; the final selection for `models/` is Issue #6).

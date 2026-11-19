@@ -4,7 +4,7 @@
 |---|---|
 | Document role | **Source of truth for how correctness is verified (tests) and how performance is measured (experiments)**, plus the results register. Per-algorithm test lists live in `04-algorithms.md` and are binding. This document defines the framework, cross-cutting tests, experiment protocol, budgets and statistics. |
 | Results of test runs | `verification-log.md` |
-| Status | Revision 2 (Issue #1). Results register updated with E1 and E2 (Issue #3), E3, the preliminary E5 slice and NFR-PERF-1 (Issue #4). |
+| Status | Revision 2 (Issue #1). Results register updated with E1 and E2 (Issue #3), E3, the Issue #4 non-learned system comparison (stored as `e5_*`) and NFR-PERF-1 (Issue #4), and with E4 (MADQL part) and the Issue #5 development comparison on validation block B (Issue #5). |
 
 ---
 
@@ -127,8 +127,9 @@ pytest markers: `slow`, `training`, `e2e`.
   | Use | Seeds |
   |---|---|
   | Training | 0–9 999 |
-  | Validation (model selection, early stopping) | 10 000–10 099 |
-  | Test (all reported comparisons) | 20 000–20 999 |
+  | Validation block A (periodic validation, checkpoint selection) | 10 000–10 019 |
+  | Validation block B (development comparison in Issues #5/#6, after configuration freeze; never used for selection or tuning) | 10 020–10 099 |
+  | Test (all reported comparisons; reserved for the official E5/E6 evaluation of Issue #8, including 20 200–20 249) | 20 000–20 999 |
   | Algorithmic micro-benchmarks (E1 queries, E3 matrices) | 30 000–39 999 |
 
   Test seeds are never used for tuning.
@@ -166,8 +167,8 @@ pytest markers: `slow`, `training`, `e2e`.
 | **E1** Planners, static | How do A\* and RRT\* compare in quality, cost and scaling? How do the RRT\* neighbour indexes compare? | **E1a**: 7 synthetic map families (random density 0/10/20/30/35 %, rooms, warehouse) × sizes {16, 32, 64, 128} × 5 maps × 20 start–goal pairs = 2 800 queries; planners A\* and RRT\* (default index) with $n_{\max}$ ∈ {500, 2 000, 5 000}; 11 200 runs; cap 30 s/run. **E1b**: RRT\* index comparison: open and 20 % density 64×64 maps, 30 queries, $n_{\max}$ ∈ {1k, 2k, 5k, 10k}, both indexes: 480 runs. **E1c**: convergence: 20 queries, $n$ up to 20 000, cost trace per iteration. Issue #7 adds maze maps to E1a (same design, 5 sizes × 10 mazes × 20 pairs). | success, lattice $\kappa$-cost and Euclidean/weighted length of both planners' outputs, optimality gap vs BFS, expansions/iterations, $k$, $k'$, NN-visited nodes, $s$, time, peak memory, empirical exponents | #3 (#7) |
 | **E2** Replanning | How costly and effective is reactive replanning? | Planner {A\*, RRT\*} × obstacles $K$ ∈ {0, 4, 8, 16} × map-event rate {0, low} × team {1 robot, 4 robots (reference follower)} × 20 seeds = 640 episodes | replans by trigger, status mix incl. `degraded`, planning latency, success, executed vs reference length | #3 |
 | **E3** Allocation | Is the auction optimal and how does it scale? What do weighted priority, aging and hysteresis change? | **E3a** (algorithmic): $k$ ∈ {5, 10, 20, 50, 100, 200, 400} × $C$ ∈ {10², 10⁴} × 20 matrices × {auction ε-scaling, auction fixed ε, sequential, Hungarian} = 1 120 solves. **E3b** (in simulation, paired): scarce-robot suite (N = 4, 3 priority levels, high arrival rate) × variants {default, κ = 0, α = 0, h = 0} × 30 seeds, A\* + baseline = 120 episodes. | E3a: optimality ratio, cardinality, bids, time, exponent. E3b: $F_w$, $\bar F^{(\pi)}$ per level, mean flow, travel per task, waiting-time tails per level (max, p95, censored count), reassignments | #4 |
-| **E4** Learning | How do MADQL and PPO (MAPPO / IPPO) compare in learning? What do the reward weights change? | MADQL × 3 seeds, MAPPO × 3 seeds (target 5 each), IPPO × ≥ 1 seed (target 3). Reward ablation $\beta$ ∈ {0, 0.3, 1} and $c_{\text{rr}}$ ∈ {0.5, 2} on MAPPO × 2 seeds. Same environment-step budget per run, fixed in Issue #5 from measured throughput. Each final policy evaluated on 100 test seeds. | curves (return, completion, conflicts per 100 robot-steps) vs steps and wall time; steps-to-threshold; seed variability; memory | #5, #6 |
-| **E5** Full system | Which planner × controller × allocator combination performs best in static vs dynamic settings? Do learned controllers avoid or introduce conflicts relative to the reference? | Planner {A\*, RRT\*} × controller {reference, baseline, MADQL, PPO} × allocator {auction, sequential} × dynamics {static, moving obstacles, full (+ map events + arrivals)} × 50 test seeds. Each of ≥ 3 trained policies evaluated separately: 1 200 non-learned + 3 600 learned = 4 800 episodes. Shield ablation: {off, predictive} × learned controllers × full dynamics × A\* × auction × 50 seeds × 3 policies = 600. *Project Issue #4 (GitHub issue #8) ran the preliminary **non-learned** slice: {baseline, reference} × planner × allocator × dynamics × 50 seeds = 1 200 paired episodes, without the shield ablation (see the E5 section below).* | all model §9 metrics: completion, flow times, conflicts per type, avoided / introduced / persisted, adherence, deviation rate, replans by trigger, shield interventions, compute per step | #4 (preliminary non-learned slice), #6 (prelim.), #8 (final) — plan numbering |
+| **E4** Learning | How do MADQL and PPO (MAPPO / IPPO) compare in learning? What do the reward weights change? | MADQL × 3 seeds, MAPPO × 3 seeds (target 5 each), IPPO × ≥ 1 seed (target 3). Reward ablation $\beta$ ∈ {0, 0.3, 1} and $c_{\text{rr}}$ ∈ {0.5, 2} on MAPPO × 2 seeds. Same environment-step budget per run, fixed in Issue #5 from measured throughput. In Issues #5 and #6 each final policy is evaluated on validation block B (80 seeds); the official test-seed evaluation of the final policies belongs to E5/E6 in Issue #8. | curves (return, completion, conflicts per 100 robot-steps) vs steps and wall time; steps-to-threshold; seed variability; memory | #5, #6 |
+| **E5** Full system | Which planner × controller × allocator combination performs best in static vs dynamic settings? Do learned controllers avoid or introduce conflicts relative to the reference? | Planner {A\*, RRT\*} × controller {reference, baseline, MADQL, PPO} × allocator {auction, sequential} × dynamics {static, moving obstacles, full (+ map events + arrivals)} × 50 test seeds. Each of ≥ 3 trained policies evaluated separately: 1 200 non-learned + 3 600 learned = 4 800 episodes. Shield ablation: {off, predictive} × learned controllers × full dynamics × A\* × auction × 50 seeds × 3 policies = 600. *Terminology: the non-learned runs of Project Issue #4 (GitHub issue #8) are the Issue #4 system comparison, not E5 (see the Issue #4 system comparison section below). Issues #5 and #6 report development comparisons on validation block B. E5 is run only in Issue #8.* | all model §9 metrics: completion, flow times, conflicts per type, avoided / introduced / persisted, adherence, deviation rate, replans by trigger, shield interventions, compute per step | #8 — plan numbering |
 | **E6** Scalability | How do runtime and quality scale with team size, task load, map size and density? Do policies generalise to larger teams? | **One-factor-at-a-time around a centre point** (N = 8, tasks = 2N, 32×32, density 15 %, moving obstacles): N ∈ {2, 4, 8, 16, 32}; tasks/N ∈ {1, 2, 4}; size ∈ {16, 32, 64}; density ∈ {0, 15, 30} % → 11 distinct cells. Plus a **2-factor grid** N ∈ {4, 16, 32} × size ∈ {16, 32, 64} (9 cells; overlaps reused). Controllers {baseline, MADQL, PPO}, using for each learned algorithm the training seed with **median validation score** (fixed before testing). Planner A\* everywhere; RRT\* additionally on the N-sweep. 20 test seeds per cell. ≈ 1 500 episodes; cap 10 min/episode. Infeasible cells (too few free cells for N robots) are rejected by validation and listed. | step-time breakdown (planning / allocation / inference / arbitration), quality metrics vs each factor, empirical exponents | #8 |
 | **E7** Data-driven | Do conclusions hold on Kaggle-derived scenarios, out of distribution for training? | Scenario family {synthetic, Olist-derived, NYC-derived, maze maps} × {reference, baseline, best MADQL, best PPO} (best = median-validation policy) × A\* × auction × 50 test seeds = 800 episodes | as E5, plus generator fidelity checks | #7, #8 |
 
@@ -188,16 +189,18 @@ Total planned simulation budget is about 10 000 episodes plus about 13 000 plann
 
 Filled only from executed experiments. Status: *not run*, *running*, *complete* or *superseded*.
 
-*Issue numbers here and in B.4 follow `07` (the project plan). Project Issue #4 is tracked on GitHub as **GitHub issue #8**. The plan's own Issue #8, the final evaluation (where the full E5 belongs), is a different issue.*
+*Issue numbers here and in B.4 follow `07` (the project plan). Project Issue #4 is tracked on GitHub as **GitHub issue #8**. The plan's own Issue #8, the final evaluation (where E5 and E6 are run), is a different issue.*
 
 | ID | Status | Config | Raw data | Summary |
 |---|---|---|---|---|
 | E1 | complete (Issue #3, 2026-11-18) | `configs/experiments/e1a_planners_static.toml`, `e1b_neighbor_index.toml`, `e1b_memory.toml`, `e1c_convergence.toml` | `results/experiments/e1a_planners_static/`, `e1b_neighbor_index/`, `e1b_memory/`, `e1c_convergence/`, plus the counter-corrected re-run `e1b_neighbor_index_r2/` and the loop-removal re-run `e1a_planners_static_r3/` (local, git-ignored) | A\* solved 2 800/2 800 queries (median ≤ 3.2 ms). RRT\* success falls with density, size and corridor structure. RRT\*'s continuous reference polylines are shorter in Euclidean length on open and low-density maps, but its executed lattice paths are never shorter than A\*'s. Default index `brute`. U fails; R consistent (k-d NN nodes examined grow like log² n). Sections below. |
 | E2 | complete (Issue #3, 2026-11-18) | `configs/experiments/e2_replanning.toml` | `results/experiments/e2_replanning/` and the loop-removal re-run `e2_replanning_r2/` (local, git-ignored) | 640 episodes, 0 timeouts. Completion shows no detectable difference between planners. RRT\* costs ≈ 140 ms per call vs ≈ 0.2 ms for A\*. Incomplete 4-robot episodes are dominated by robot–robot deadlocks of the plan follower. Section below. |
 | E3 | complete (Issue #4, 2026-11-18) | `configs/experiments/e3a_assignment.toml`, `e3b_priority.toml` | `results/experiments/e3a_assignment/`, `e3b_priority/` (local, git-ignored) | E3a: 1 120 solves, 0 timeouts. The ε-scaling auction is optimal in 280/280; every fixed-ε (ε = 1) gap ≤ k; the sequential auction satisfies 2V ≥ OPT in 280/280 but is optimal in only 10/280. Measured exponents are far below the worst-case bounds. The exact Python auction is 7–11× slower than SciPy's compiled Hungarian at k = 400, and more at small k. E3b: 120 paired episodes. κ > 0 lowers $F_w$ (−3.4 [−4.9, −2.0]) and top-level flow time (−10.3 [−14.2, −7.0]), at a mean-flow price (+2.0 [0.6, 3.7], Holm p = 0.059). α > 0 lowers the level-1 maximum wait (−20.3 [−34.0, −7.7]); h > 0 cuts re-assignments (−4.0). Sections below. |
-| E4 | not run | — | — | — |
-| E5 | **preliminary non-learned slice only** (Project Issue #4 = GitHub issue #8, 2026-11-18); full E5 not run (plan Issues #6 and #8) | `configs/experiments/e5_prelim.toml` (baseline), `e5_prelim_reference.toml` (reference follower) | `results/experiments/e5_prelim/`, `e5_prelim_reference/`, `e5_prelim_comparison.md` (local, git-ignored) | 1 200 paired episodes without endpoint recovery (controller × planner × allocator × dynamics × 50 test seeds), plus 1 200 further episodes with endpoint recovery (`e5_recovery*.toml`): **2 400 E5 runs in total**.<br>**Baseline:** pooled completion 0.9921 (91 of 11 488 tasks undelivered; 83 of 600 episodes incomplete), 0 RR conflicts, 0 physical collisions. 89 of the 91 undelivered tasks are permanent blockages: an obstacle or an idle robot on the goal.<br>**Reference follower:** pooled 0.8819 (404 of 600 episodes incomplete), 15–25 proposed conflicts per 100 robot-steps, dominated by contests on free cells.<br>**With endpoint recovery** (`e5_recovery*.toml`, same seeds, paired): baseline 0.9993 (8 of 600 incomplete; 6 tasks on never-leaving patrol obstacles, reported as exhausted), reference 0.8881 (384 incomplete). Section below. |
+| E4 | MADQL part complete (Issue #5, 2026-11-19); MAPPO, IPPO and the reward ablation follow in Issue #6 | `configs/training/madql.toml` (run seeds 1–3 via `--seed`) | `results/training/madql_seed{1,2,3}/` (local, git-ignored) | 3 runs × 1 000 000 environment steps (7 176–7 581 s each, run concurrently). Checkpoints selected on block A: seed 1 at 800 k (completion 0.715, base return 1.590), seed 2 at 1 M (0.635, 1.566), seed 3 at 700 k (0.631, 1.692). Validation fluctuates by up to 0.25 between consecutive checks. The static level is the weakest. 0 physical collisions. Section below. |
+| Issue #5 development comparison (validation block B; not E5) | complete, run once (Issue #5, 2026-11-19) | `python -m robocoord.marl.devcompare` with the three selected checkpoints | `results/dev5/comparison/` (local, git-ignored) | 1 500 episodes (A\* 240 and RRT\* 60 per controller). **MADQL completion is lower** than the baseline (pooled −0.41 with A\*, −0.31 with RRT\*) and than the reference follower (−0.32, −0.21); every per-policy Holm p ≤ 4 × 10⁻⁷. MADQL proposes 13–16 fewer conflicts per 100 robot-steps than the reference follower. Against the baseline there is no clear difference in the per-step conflict rate, which is confounded by episode length. 0 physical collisions. Section below. |
+| Issue #4 system comparison (non-learned; not E5) | Project Issue #4 = GitHub issue #8, 2026-11-18; MADQL/PPO and the shield ablation are not part of it | `configs/experiments/e5_prelim.toml` (baseline), `e5_prelim_reference.toml` (reference follower) | `results/experiments/e5_prelim/`, `e5_prelim_reference/`, `e5_prelim_comparison.md` (local, git-ignored) | 1 200 paired episodes without endpoint recovery (controller × planner × allocator × dynamics × 50 test seeds), plus 1 200 further episodes with endpoint recovery (`e5_recovery*.toml`): **2 400 runs in total**.<br>**Baseline:** pooled completion 0.9921 (91 of 11 488 tasks undelivered; 83 of 600 episodes incomplete), 0 RR conflicts, 0 physical collisions. 89 of the 91 undelivered tasks are permanent blockages: an obstacle or an idle robot on the goal.<br>**Reference follower:** pooled 0.8819 (404 of 600 episodes incomplete), 15–25 proposed conflicts per 100 robot-steps, dominated by contests on free cells.<br>**With endpoint recovery** (`e5_recovery*.toml`, same seeds, paired): baseline 0.9993 (8 of 600 incomplete; 6 tasks on never-leaving patrol obstacles, reported as exhausted), reference 0.8881 (384 incomplete). Section below. |
 | NFR-PERF-1 (**A\*** requirement) | measured; before optimisation **not met** as a per-step bound; after O1/O2 + symmetric reuse **met for workload R** on AC power on this machine, in the original benchmark and in an independent Windows verification. RRT\* is outside the requirement and still 23–34 % of its workload-F steps exceed 20 ms | `python -m robocoord.experiments.perf --out <new dir> --workload R --impl legacy,fast` (paired); `--legacy` for the original workload | `results/perf/`, `results/perf_r2/` (before); `results/perf_r3_R/` (intermediate, battery); `results/perf_r4/` (original implementation benchmark); `results/perf_verify/` (independent Windows verification). All local, git-ignored | Before: 21–29 of ≈ 2 800 steps per run ≥ 20 ms (first and map-event steps). Original benchmark, workload R: max 9.53 ms (legacy 33.7–35.6 ms; 40 exceedances → 0). Independent verification, workload R: max 10.56 ms, 0 exceedances (legacy 40). Full workload F, A\*: max 15.43 ms, 0 exceedances. Battery run (intermediate): 3 of 40 first steps ≥ 20 ms. Section below. |
+| E5 | not run (plan Issue #8) | — | — | — |
 | E6 | not run | — | — | — |
 | E7 | not run | — | — | — |
 
@@ -444,13 +447,13 @@ The polylog model fits better in every case. For nodes examined its exponent is 
 - **H3** is supported on this suite for κ, and partly for α: the maximum lowest-level wait drops, but the p95 effect is weak. Aging is still **not** a starvation-freedom guarantee (model G13); see the constructed backlog counter-example in `04` §4.4.
 - Threats: one synthetic suite, one arrival rate and N = 4. The default variant's p95 effect is small relative to seed variance. The episodes drain completely (no censoring), so overload behaviour is not covered.
 
-### E5 — Preliminary non-learned slice (Project Issue #4 = GitHub issue #8; NOT the full E5)
+### Issue #4 system comparison (non-learned; Project Issue #4 = GitHub issue #8; stored as `e5_*`; NOT E5)
 
 - **Scope.**
-  - GitHub issue #8 (Project Issue #4) asks for "preliminary non-learned E5 numbers". This catalogue assigns E5 to the plan's Issue #6 (preliminary) and Issue #8 (final evaluation); that plan Issue #8 is not GitHub issue #8.
-  - The non-learned E5 slice run here covers **both non-learned controllers**: planner {A\*, RRT\* ($n_{\max}$ = 1 000)} × allocator {auction, sequential} × dynamics {static, moving obstacles, full} × controller {baseline, reference follower} × test seeds 20200–20249 = **1 200 paired episodes without endpoint recovery** (600 baseline + 600 reference follower). The same 1 200 instances were run again with endpoint recovery (`e5_recovery*.toml`, below), which adds **1 200 further episodes**. Total E5 runs in this document: **2 400** (1 200 without recovery plus 1 200 with recovery).
+  - GitHub issue #8 (Project Issue #4) asks for "preliminary non-learned E5 numbers". Under the approved experiment mapping, E5 and E6 belong exclusively to the plan's Issue #8 (final evaluation; not GitHub issue #8). The runs reported here are therefore called the *Issue #4 system comparison*. The historical term "preliminary E5" remains only in GitHub issue #8, in the verification log (V-8 to V-11) and in the stored `e5_*` file and directory names.
+  - The non-learned system comparison run here covers **both non-learned controllers**: planner {A\*, RRT\* ($n_{\max}$ = 1 000)} × allocator {auction, sequential} × dynamics {static, moving obstacles, full} × controller {baseline, reference follower} × test seeds 20200–20249 = **1 200 paired episodes without endpoint recovery** (600 baseline + 600 reference follower). The same 1 200 instances were run again with endpoint recovery (`e5_recovery*.toml`, below), which adds **1 200 further episodes**. Total runs in this document: **2 400** (1 200 without recovery plus 1 200 with recovery).
   - The baseline half was run first (approved while the reference follower was out of scope). The reference half was added after the audit with the identical methodology.
-  - **Not included:** MADQL/PPO, the shield ablation and the final E5 (plan Issues #5/#6/#8). **This is not the full E5.**
+  - **Not included:** MADQL/PPO and the shield ablation (plan Issues #5/#6), and E5/E6 (plan Issue #8). **This is not E5.**
 - **Config and data:**
   - Baseline half: `configs/experiments/e5_prelim.toml` → `results/experiments/e5_prelim/`.
   - Reference half: `configs/experiments/e5_prelim_reference.toml` → `results/experiments/e5_prelim_reference/`.
@@ -507,14 +510,14 @@ The polylog model fits better in every case. For nodes examined its exponent is 
 - **Paired auction − sequential, baseline half** (Holm over 12): no difference in completion or mean flow survives correction. The largest is RRT\*, obstacles, mean flow −1.38 [−2.32, −0.45], Holm p = 0.083.
 - Wall times per step come from 10 parallel workers and are indicative only.
 
-#### E5 with endpoint recovery (Project Issue #4 endpoint follow-up; still NOT the full E5)
+#### Issue #4 system comparison with endpoint recovery (Project Issue #4 endpoint follow-up; still NOT E5)
 
 - **What changed.** Endpoint recovery (`04` §5.6): idle robots park off active task endpoints, and a robot retreats from a goal held for $W = 4$ steps. The parameters ($W = 4$, $H = 8$, $M = 3$, radius 8) were fixed from existing model constants before any run and were not tuned. Smoke checks during development used seeds 10000–10019, not the test seeds.
 - **Configs and data.**
   - `configs/experiments/e5_recovery.toml` (baseline) and `e5_recovery_reference.toml` (reference follower): identical to `e5_prelim(.toml/_reference.toml)` in every factor, test seed (20200–20249), scenario parameter, metric and cap, plus `endpoint = "on"`.
   - Results in `results/experiments/e5_recovery/`, `e5_recovery_reference/`; comparisons in `e5_recovery_comparison.md`, `e5_recovery_reference_comparison.md`, `e5_recovery_controllers.md`.
   - The no-recovery runs above are the paired "before"; they were not re-run or changed.
-  - Outcome: 1 200 `done` (600 baseline + 600 reference follower; recovery on). These are the same instances as the no-recovery runs above, so the two settings give **2 400 E5 runs in total**. Released counts are identical across recovery off/on for every instance, so the comparison is paired.
+  - Outcome: 1 200 `done` (600 baseline + 600 reference follower; recovery on). These are the same instances as the no-recovery runs above, so the two settings give **2 400 runs in total**. Released counts are identical across recovery off/on for every instance, so the comparison is paired.
 - **Metric definitions are unchanged** (`04` §5.6 lists where recovery can move a value; mean flow is over delivered tasks only, and the deviation rate excludes parking steps).
 
 | controller | recovery | pooled delivered/released | incomplete episodes | undelivered tasks |
@@ -574,7 +577,7 @@ The polylog model fits better in every case. For nodes examined its exponent is 
   - Excluded: engine construction and trace writing.
   - This is a **superset** of the requirement: the shield, the resolver, the counterfactual detection and the "full" dynamics are not required.
 - **Workload and procedure** (`src/robocoord/experiments/perf.py`):
-  - The E5 "full" generator: 32×32, 15 % obstacles, 8 robots, 16 scheduled tasks, 8 moving obstacles, 6 map events of 20 steps (block and unblock), arrivals.
+  - The `e5_scenario` "full" generator (a generator name from Issue #4): 32×32, 15 % obstacles, 8 robots, 16 scheduled tasks, 8 moving obstacles, 6 map events of 20 steps (block and unblock), arrivals.
   - Seeds 30500–30509 (micro-benchmark range).
   - One unmeasured warm-up episode, then one natural episode per seed (cap 400 steps) per allocator. `perf_counter` around each step; a single process.
   - Machine: Intel64 Family 6 Model 186 (12 logical CPUs), Windows 11, CPython 3.14.3, NumPy 2.4.6.
@@ -609,7 +612,7 @@ The polylog model fits better in every case. For nodes examined its exponent is 
 - **Outcome (before optimisation; superseded by the paired measurement below).** NFR-PERF-1 is **not met as a per-step bound**: every episode's first step and 11–19 of the 116 map-event steps (9–16 %, depending on the run: 21, 23 and 29 exceedances = 10 first steps + 11, 13 and 19 map-event steps) exceed 20 ms. It is met for every steady-state step measured. The median and p99 alone do not establish the requirement.
   - At the time of this measurement no optimisation had been made (not required by acceptance criterion 5). The follow-up optimisation is reported in the next subsection.
   - A prototype that answers availability checks from connected-component labels (audit, not in the code) removed only a few exceedances, because the auction still needs the distance fields.
-- **Component times** (median / p95): planning 0.04 / 0.34; controller 0.02 / 0.04; shield and resolver ≈ 0.007 / 0.02; allocation 0.01 / 1.5. The engine's remaining work (views, detection, metrics) is 0.45 / 2.3. RRT\* steps take ≈ 50–65 ms (E5), but NFR-PERF-1 is defined for A\*.
+- **Component times** (median / p95): planning 0.04 / 0.34; controller 0.02 / 0.04; shield and resolver ≈ 0.007 / 0.02; allocation 0.01 / 1.5. The engine's remaining work (views, detection, metrics) is 0.45 / 2.3. RRT\* steps take ≈ 50–65 ms (Issue #4 system comparison), but NFR-PERF-1 is defined for A\*.
 - *The runs above (r1, r2) are the pre-optimisation evidence and are kept unchanged. The optimisation and its paired measurements follow.*
 
 #### NFR-PERF-1 after optimisation (Project Issue #4 follow-up): workloads R and F, paired before/after
@@ -621,7 +624,7 @@ The polylog model fits better in every case. For nodes examined its exponent is 
   - O3 (incremental repair after single-cell map events) was **not** implemented: after O1/O2 no A\* step exceeds 20 ms, including all map-event steps.
   - Nothing was moved into engine construction or out of the timed step. Every step is measured and kept.
 - **Workloads** (`src/robocoord/experiments/perf.py`, `run_workloads`):
-  - **R** (requirement-focused): 8 robots, 32×32 E5 map (15 % obstacles), A\*, headless, the system defaults with an allocator. That means the baseline with the deadlock resolver and endpoint recovery, shield off; each allocator; without moving obstacles (`static`) and with 8 (`obstacles`).
+  - **R** (requirement-focused): 8 robots, 32×32 `e5_scenario` map (15 % obstacles), A\*, headless, the system defaults with an allocator. That means the baseline with the deadlock resolver and endpoint recovery, shield off; each allocator; without moving obstacles (`static`) and with 8 (`obstacles`).
   - **F** (full system): `full` dynamics (8 moving obstacles, 6 map events, Bernoulli arrivals), predictive shield, endpoint recovery, resolver as the CLI default; planner {A\*, RRT\* $n_{\max}$ = 1 000} × allocator × controller {baseline, reference}.
   - Seeds 30500–30509; one natural episode per seed, cap 400; one unmeasured warm-up per configuration and implementation.
 - **Pairing.**
@@ -676,3 +679,150 @@ The student ran the same command independently on Windows 11 (build 26300) with 
 - **Legacy exceedances** are all first steps (10 per configuration, one per seed). The fast implementation has none.
 - **Behaviour is identical:** the state digests match at every step in all four configurations. Fast deliveries are 160/160, 159/160, 160/160 and 160/160, the same as legacy, with 0 physical collisions.
 - **Reading.** This run also meets the strict per-step bound for R, with a fast maximum of 10.56 ms, about 1.9× below the limit. The two runs on this machine agree on the conclusion, but not on the tail: the fast p99 in this run is up to 1.6× the original run's, and the maxima differ by about 1 ms. One run on one machine is therefore evidence, not a guarantee. The bound is established here for workload R on AC power on this Windows machine. It is not established on battery, on other hardware, or for RRT\*.
+
+### E4 (MADQL part) — Training with A\* (Issue #5, complete; MAPPO and IPPO follow in Issue #6)
+
+- **Config:** `configs/training/madql.toml` (1 000 000 environment steps per run; sampler seed 0). Run seeds 1, 2 and 3 are passed with `--seed`. **Raw data:** `results/training/madql_seed{1,2,3}/`. Each directory holds `config.json`, `train_log.jsonl`, `validation.jsonl`, `checkpoints/`, `best.pt` with its `best.json` sidecar, and `summary.json`; the stdout of each run is in `results/training/madql_seed{1,2,3}.log`. All local and git-ignored; no checkpoint is committed (ADR-9).
+- **Command:** `python -m robocoord train --config configs/training/madql.toml --seed <s> --out results/training/madql_seed<s>`. The three runs ran concurrently on one machine.
+- **Environment:** Windows 11 (build 26300), 12 logical CPUs, CPython 3.14.3, NumPy 2.4.6, torch 2.15.0+cpu. Torch used 1 thread in deterministic mode, and validation used 3 worker processes per run.
+- **Design (as approved; `04` §6 and the implementation notes):**
+  - Parameter-shared Double DQN, MLP 356→256→256→5 (158 469 parameters), 4 synchronous environment copies.
+  - Planner A\* only during training, with the auction allocator, endpoint recovery on, resolver off and shield off.
+  - Curriculum stages 1/2/3 take 20/30/50 % of the step budget.
+  - Block-A validation every 50 000 steps: 60 A\* episodes (seeds 10 000–10 019 × {static, obstacles, full}).
+  - RRT\* monitoring every 250 000 steps: 10 episodes (seeds 10 000–10 009, full level, $n_{\max}$ = 1 000). It is not used for selection.
+  - Checkpoint selection is lexicographic on block A: overall completion first, then mean discounted base return.
+
+**Cost per run**
+
+| run seed | completed episodes | gradient updates | wall time | of which validation | training throughput (excluding validation) |
+|---|---|---|---|---|---|
+| 1 | 3 474 | 249 186 | 7 581 s | 2 114 s | 183 steps/s |
+| 2 | 3 466 | 249 186 | 7 543 s | 2 170 s | 186 steps/s |
+| 3 | 3 463 | 249 186 | 7 176 s | 1 995 s | 193 steps/s |
+
+- The replay buffer holds 200 000 transitions in 160.2 MB (`ReplayBuffer.nbytes`). Peak process memory was **not measured**.
+- One inference checkpoint takes 636 401 bytes. Each run directory, including every step checkpoint with its training state, takes 66.8 MB.
+
+**Block-A A\* validation (60 episodes; completion / mean discounted base return)**
+
+| run seed | selected step | overall | static | obstacles | full | final step (1 M), overall |
+|---|---|---|---|---|---|---|
+| 1 | 800 000 | **0.715 / 1.590** | 0.441 / 0.672 | 0.841 / 1.836 | 0.804 / 2.261 | 0.470 / 0.923 |
+| 2 | 1 000 000 | **0.635 / 1.566** | 0.394 / 0.782 | 0.734 / 1.820 | 0.720 / 2.096 | 0.635 / 1.566 |
+| 3 | 700 000 | **0.631 / 1.692** | 0.362 / 0.944 | 0.772 / 1.948 | 0.707 / 2.183 | 0.560 / 1.272 |
+
+- **Learning curves** (overall block-A completion at 50 k / 250 k / 500 k / 750 k / 1 M steps):
+  - seed 1: 0.065 / 0.238 / 0.328 / 0.571 / 0.470;
+  - seed 2: 0.107 / 0.260 / 0.301 / 0.634 / 0.635;
+  - seed 3: 0.083 / 0.241 / 0.143 / 0.357 / 0.560.
+- **Steps to threshold:** the first validation with overall completion ≥ 0.5 was at 600 k for seeds 1 and 2 and 650 k for seed 3. Completion ≥ 0.6 was first reached at 700 k, 750 k and 700 k.
+- Physical collisions were 0 in every validation episode and every training episode.
+- **Instability between validations (negative evidence kept).** Consecutive validations differ by up to 0.25 in overall completion:
+  - seed 1 fell from 0.715 at 800 k to 0.470 at 850 k;
+  - seed 2 fell from 0.431 at 850 k to 0.248 at 900 k, then recovered to 0.543;
+  - seed 3 fell from 0.631 at 700 k to 0.357 at 750 k.
+
+  The final weights of seeds 1 and 3 are therefore worse on block A than the selected checkpoints. Selection on block A is what makes the selected policies usable, so their block-A scores are **optimistically biased** (the maximum of 20 noisy evaluations). Block B below is the unbiased development estimate.
+- **Static level is the weakest** (0.36–0.44 completion against 0.71–0.84 for the dynamic levels at the selected steps). The cause has not been established. The block-A static episodes are the same 32×32, 8-robot, 16-task scenarios without obstacles.
+- **RRT\* monitoring** (block A, full level, 10 episodes, completion / base return):
+
+  | run seed | 250 k | 500 k | 750 k | 1 M |
+  |---|---|---|---|---|
+  | 1 | 0.298 / −0.17 | 0.415 / 0.26 | 0.732 / 1.62 | 0.526 / 1.32 |
+  | 2 | 0.331 / −0.75 | 0.393 / 0.32 | 0.787 / 2.12 | 0.728 / 2.17 |
+  | 3 | 0.368 / 0.60 | 0.121 / −0.36 | 0.312 / 0.40 | 0.662 / 1.70 |
+
+  Policies trained only with A\* reference paths also run with RRT\* reference paths, with 0 physical collisions. The selected checkpoints of seeds 1 (800 k) and 3 (700 k) fall between RRT\* monitoring points; their RRT\* evaluation is the block-B comparison below.
+- **Training episodes** (ε-greedy, the last 50 episodes of each stage; completion for runs 1 / 2 / 3):
+  - stage 1: 0.90 / 0.94 / 0.89;
+  - stage 2: 0.79 / 0.84 / 0.86;
+  - stage 3: 0.92 / 0.90 / 0.91.
+
+  These training scenarios include smaller maps and teams than the validation levels, so these figures are not comparable with block A.
+- **Shaping magnitude** (logged per episode; approved design, no clipping):
+  - |shaping| > 1 occurred in 1 911–2 003 robot-steps per run, about 0.04 % of about 4.68 M robot-steps.
+  - In stages 1 and 2 (static and obstacle levels) the maximum was 1.55–1.98, from changes in the assigned route Λ.
+  - Values up to 15.985 occur only at the full level, in 688–729 of about 1 300 stage-3 episodes. This equals the capped-distance jump when a goal becomes unreachable or reachable again after a map event ($W·H/(W+H)$ = 16 on 32×32 maps).
+  - These spikes are a known property of $\bar D$ (model §7) and were not investigated further.
+- **H5** (stability and sample efficiency against PPO) cannot be assessed until Issue #6. The between-seed spread of the selected policies is 0.631–0.715 in block-A completion.
+- **Threats to validity:**
+  - one machine, with three runs sharing it;
+  - three training seeds;
+  - one budget (1 M steps), set from measured throughput rather than from convergence (V-14);
+  - hyper-parameters were not tuned;
+  - block-A selection bias, as above;
+  - the static-level gap has not been explained.
+
+### Issue #5 development comparison (validation block B; NOT E5)
+
+- **Command (run once, after all three trainings had finished and their checkpoints had been selected on block A):** `python -m robocoord.marl.devcompare --policy results/training/madql_seed1/best.pt --policy results/training/madql_seed2/best.pt --policy results/training/madql_seed3/best.pt --out results/dev5/comparison --workers 10`.
+  - **Raw data:** `results/dev5/comparison/` (`manifest.json` with each checkpoint's SHA-256, configuration hash and block-A scores; `records.jsonl`; `analysis.json`; `summary.md`) and `results/dev5/comparison.log`. All local and git-ignored.
+  - Nothing was tuned or re-selected afterwards.
+- **Design (approved; `marl/devcompare.py`):**
+  - Controllers: baseline (resolver on), reference follower, and the three selected MADQL policies (greedy). Every controller runs with the auction allocator, endpoint recovery on and shield off.
+  - A\*: seeds 10 020–10 099 × {static, obstacles, full}, giving 240 paired episodes per controller.
+  - RRT\* ($n_{\max}$ = 1 000): seeds 10 020–10 039 × the three levels, giving 60 per controller.
+  - In total, 1 500 episodes in 2 109 s with 10 worker processes.
+  - Seeds used are 10 020–10 099 only; no test seed was used.
+- **Statistics (B.3):**
+  - For each metric, policy, comparator and planner: the paired difference MADQL − comparator, with a paired bootstrap 95 % CI, the Wilcoxon signed-rank p, Holm–Bonferroni within the metric's family of 12, and the matched-pairs rank-biserial r.
+  - The pooled estimate over the three policies is a two-level bootstrap (resample policies, then instances).
+  - Completion is pooled per controller as delivered over released tasks.
+- **Outcome:** 0 physical collisions in all 1 500 episodes.
+
+**Pooled completion (delivered / released)**
+
+| controller | A\* overall (240) | static | obstacles | full | RRT\* overall (60) | conflicts / 100 robot-steps (A\* / RRT\*) | base return (A\* / RRT\*) |
+|---|---|---|---|---|---|---|---|
+| baseline | 0.999 | 1.000 | 0.999 | 0.999 | 0.997 | 0.08 / 0.05 | 3.518 / 3.252 |
+| reference follower | 0.911 | 0.866 | 0.933 | 0.925 | 0.904 | 13.51 / 16.31 | −16.561 / −20.643 |
+| MADQL seed 1 (800 k) | 0.661 | 0.338 | 0.807 | 0.768 | 0.787 | 0.22 / 0.34 | 1.484 / 1.197 |
+| MADQL seed 2 (1 M) | 0.584 | 0.336 | 0.727 | 0.647 | 0.609 | 0.08 / 0.07 | 1.460 / 1.366 |
+| MADQL seed 3 (700 k) | 0.575 | 0.306 | 0.747 | 0.634 | 0.705 | 0.11 / 0.27 | 1.294 / 1.508 |
+
+**Pooled over the three policies (two-level bootstrap; MADQL − comparator)**
+
+| metric | vs | planner | mean diff | 95 % CI |
+|---|---|---|---|---|
+| completion | baseline | A\* | −0.408 | [−0.445, −0.364] |
+| completion | baseline | RRT\* | −0.305 | [−0.391, −0.228] |
+| completion | reference | A\* | −0.316 | [−0.353, −0.272] |
+| completion | reference | RRT\* | −0.209 | [−0.295, −0.132] |
+| base return | baseline | A\* | −2.106 | [−2.254, −1.993] |
+| base return | baseline | RRT\* | −1.895 | [−2.223, −1.667] |
+| base return | reference | A\* | +17.974 | [16.553, 19.447] |
+| base return | reference | RRT\* | +22.000 | [18.291, 25.859] |
+| conflicts / 100 | baseline | A\* | +0.056 | [−0.026, 0.165] |
+| conflicts / 100 | baseline | RRT\* | +0.168 | [0.008, 0.403] |
+| conflicts / 100 | reference | A\* | −13.371 | [−14.409, −12.365] |
+| conflicts / 100 | reference | RRT\* | −16.087 | [−18.858, −13.416] |
+
+Per-policy rows with Wilcoxon and Holm p-values and r are in `summary.md` / `analysis.json`. Their reading:
+
+- **Completion: MADQL is worse than both non-learned controllers (negative result).**
+  - All 12 per-policy comparisons are negative. The per-episode mean differences are −0.22 to −0.44 against the baseline and −0.13 to −0.34 against the reference. Every Holm p ≤ 4 × 10⁻⁷ and every |r| ≥ 0.80.
+  - None of the three policies reaches the reference follower's completion on any planner.
+- **Base return:**
+  - Lower than the baseline in all 6 comparisons (≈ −1.7 to −2.2).
+  - Much higher than the reference follower in all 6 (≈ +18 to +22). The reference follower's return is dominated by conflict penalties.
+- **Conflicts against the reference follower:** MADQL proposes far fewer conflicts, 13–16 per 100 robot-steps fewer in all 6 comparisons (Holm p ≤ 1.4 × 10⁻¹⁰). This matches the first part of H4 on development data. It comes with the completion loss above. It is not E5 evidence.
+- **Conflicts against the baseline: no clear difference, and confounded by episode length.**
+  - On RRT\* every per-policy Holm p is 1.
+  - On A\*, the Wilcoxon test favours MADQL (Holm p ≤ 1.4 × 10⁻⁴, r −0.39 to −0.70: 102–115 of 240 pairs lower and 32–44 higher). The mean differences, however, are close to zero (−0.004 to +0.145), and for seed 1 the difference is positive by CI.
+  - The rate is per robot-step, and MADQL episodes run to the 400-step horizon, while the baseline usually finishes earlier (mean 100–226 steps per level). In **absolute** conflicts per episode, MADQL has 2.4–6.8 against the baseline's 1.0 on A\*, and 2.1–10.7 against 0.75 on RRT\*. The lower per-step rate therefore reflects longer episodes, not fewer conflicts.
+- **Behaviour (descriptive):**
+  - MADQL episodes almost never terminate: 0–6 of 80 per level on A\*, against 79–80 for the baseline and 27–47 for the reference follower.
+  - Wait ratio: 0.10–0.19 for seed 1, 0.31–0.51 for seed 2 and 0.20–0.31 for seed 3, against ≈ 0.03–0.05 for the baseline.
+  - MADQL deviates from the suggested action in 22–44 of every 100 robot-steps.
+- **Static level is the weakest** (A\* completion 0.31–0.34), as on block A.
+  - The cause is not established.
+  - Recorded fact, not a tested explanation: the curriculum contains static scenarios only in stage 1 (2–4 robots, 16×16 maps). The obstacle level is equally absent from training at 32×32 with 8 robots, yet scores 0.73–0.81.
+- **Selection bias:** block-B A\* completion (0.661 / 0.584 / 0.575) is 0.05–0.06 below the block-A scores of the same checkpoints (0.715 / 0.635 / 0.631). This is consistent with the optimistic bias of selecting the best of 20 validations. The instances differ, so this is not a paired test.
+- **RRT\* against A\* for MADQL on the same 20 seeds (descriptive, not tested):** completion with RRT\* reference paths is not lower than with A\* (0.787 / 0.609 / 0.705 against 0.687 / 0.570 / 0.599).
+- **Threats to validity:**
+  - 80 block-B seeds (20 for RRT\*);
+  - three policies from one configuration and one budget;
+  - per-step conflict rates confounded by episode length, as above;
+  - one machine.
+- **Consequence for the plan:** MADQL at this budget and configuration does **not** outperform the rule-based baseline or the reference follower in task completion. Following ADR-3 in `03` (fallback), VDN *may be added* if MADQL learns poorly. That decision, and any change to the budget or hyper-parameters, is the student's and is **not** made here.
