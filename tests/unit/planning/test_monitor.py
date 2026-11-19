@@ -1,5 +1,9 @@
 """X-12 path monitor: triggers T1–T6 fire exactly when specified, rejoin advances without
-replanning, the goal is never stall-blocked, and every call is attributed (model §5.4)."""
+replanning, the goal is never stall-blocked, and every call is attributed (model §5.4).
+
+The trigger-set assertion also pins T7 (deadlock detour) and T8 (endpoint recovery), which the
+monitor only produces when the coordinator supplies a temporary goal (their behaviour is tested in
+``test_monitor_detour.py``, ``test_deadlock.py`` and ``test_endpoint.py``)."""
 
 from __future__ import annotations
 
@@ -9,7 +13,13 @@ from robocoord.core.errors import ConfigError
 from robocoord.core.grid import OccupancyGrid
 from robocoord.core.types import Action, Cell
 from robocoord.planning import AStarPlanner, ConstraintParams, RRTStarConfig, RRTStarPlanner
-from robocoord.planning.monitor import TRIGGERS, MonitorParams, PathMonitor, RobotInput
+from robocoord.planning.monitor import (
+    BASE_TRIGGERS,
+    TRIGGERS,
+    MonitorParams,
+    PathMonitor,
+    RobotInput,
+)
 
 OPEN = ["." * 9] * 5  # 9 × 5 open map
 
@@ -131,7 +141,12 @@ def test_one_call_per_step_attribution_and_reset_on_idle() -> None:
     # goal change and deviation at the same step → one call, attributed to T1
     assert _one(m, 1, (0, 3), (8, 0)) == ["T1"]
     assert _one(m, 2, (0, 3), None) == [] and m.states[0].path is None
-    assert set(TRIGGERS) == {"T1", "T2", "T3", "T4", "T5", "T6"}
+    # T7 (deadlock detour, Issue #4 stage 5B) is only produced by the opt-in resolver and T8 only
+    # by endpoint recovery (Issue #4 endpoint follow-up); the Issue #3 triggers and their
+    # attribution are unchanged.
+    assert set(TRIGGERS) == {"T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"}
+    assert BASE_TRIGGERS == ("T1", "T2", "T3", "T4", "T5", "T6") and TRIGGERS["T7"] == "deadlock"
+    assert TRIGGERS["T8"] == "endpoint"
     with pytest.raises(ConfigError):
         MonitorParams(cooldown=0)
 

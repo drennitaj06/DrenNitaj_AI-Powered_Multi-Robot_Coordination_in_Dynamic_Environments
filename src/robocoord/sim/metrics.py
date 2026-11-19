@@ -106,6 +106,11 @@ class MetricsRecorder:
         self.persisted = 0
         self.adherence_steps = 0
         self.adherence_matches = 0
+        self._shield = False
+        self.shield_interventions = 0
+        self.shield_prevented = 0
+        self.shield_introduced = 0
+        self.shield_controller_conflicts = 0
 
     # ------------------------------------------------------------------ legs (path efficiency)
     def leg_start(self, robot: int, optimal: int | None) -> None:
@@ -158,6 +163,31 @@ class MetricsRecorder:
             self.avoided += len(reference_events - controller_events)
             self.introduced += len(controller_events - reference_events)
             self.persisted += len(reference_events & controller_events)
+
+    def enable_shield(self) -> None:
+        self._shield = True
+
+    def record_shield(
+        self,
+        interventions: int,
+        controller_events: frozenset[ConflictEvent],
+        arbitrated_events: frozenset[ConflictEvent],
+    ) -> None:
+        """Shield effect on one step: ``K^ctrl ∖ K^arb`` prevented, ``K^arb ∖ K^ctrl`` introduced
+        (a robot kept in place by the shield became another robot's target)."""
+        self.shield_interventions += interventions
+        self.shield_prevented += len(controller_events - arbitrated_events)
+        self.shield_introduced += len(arbitrated_events - controller_events)
+        self.shield_controller_conflicts += len(controller_events)
+
+    def shield_summary(self) -> dict[str, object]:
+        per_100 = 100.0 / self.robot_steps if self.robot_steps else 0.0
+        return {
+            "interventions_per_100_robot_steps": self.shield_interventions * per_100,
+            "controller_conflicts": self.shield_controller_conflicts,
+            "prevented": self.shield_prevented,
+            "introduced": self.shield_introduced,
+        }
 
     def record_adherence(
         self,

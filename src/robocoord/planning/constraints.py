@@ -8,11 +8,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import Protocol
 
 from robocoord.core.errors import ConfigError
 from robocoord.core.grid import OccupancyGrid
 from robocoord.core.types import Cell
 from robocoord.planning.base import PlanConstraints
+
+
+class FreeCellQuery(Protocol):
+    """What :func:`sense` needs from a map: ``OccupancyGrid`` or the read-only ``MapView``."""
+
+    def is_free(self, c: Cell) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +49,7 @@ class SensedObstacles:
 
 
 def sense(
-    grid: OccupancyGrid,
+    grid: FreeCellQuery,
     position: Cell,
     obstacles: Mapping[Cell, Cell],
     sensing_radius: int,

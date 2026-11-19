@@ -7,9 +7,12 @@ Step ``t`` → ``t + 1``:
 3. the coordinator (re)assigns tasks — and, from Issue #3, (re)plans;
 4. observations: a :class:`~robocoord.sim.view.WorldView` with action masks and suggestions;
    the controller returns a joint proposal;
-5. (shield — Issue #4; currently the identity);
-6. conflict detection + arbitration; physical-collision invariant check (G1);
-7. counterfactual conflict sets for the reference proposal (when suggestions exist);
+5. the optional safety shield (Issue #4, ``control.shield``): ``a^ctrl → a^arb``; identity if
+   none is configured;
+6. conflict detection + arbitration on ``a^arb``; physical-collision invariant check (G1);
+7. counterfactual conflict sets ``K^ref`` (the suggested actions, masked → stay) and
+   ``K^ctrl`` (the controller's raw proposal) when suggestions exist (model §9.2, X-10), and the
+   shield's prevented / introduced sets ``K^ctrl ∖ K^arb`` / ``K^arb ∖ K^ctrl``;
 8. pickups and deliveries at ``t + 1``;
 9. path monitor bookkeeping: done by a planning coordinator at the start of the next step's
    pipeline step 3 (it sees the positions at ``t + 1``, which is equivalent);
@@ -27,8 +30,9 @@ physical-collision check raises :class:`PhysicalCollisionError`, so the recorded
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from robocoord.core.distance import DistanceOracle
 from robocoord.core.rng import make_streams
@@ -81,8 +85,30 @@ class EngineStateError(RuntimeError):
 _MODE_CODE = {RobotMode.IDLE: "I", RobotMode.TO_PICKUP: "P", RobotMode.TO_DROPOFF: "D"}
 
 
+class SafetyLayer(Protocol):
+    """What the engine needs from a shield (implemented by ``control.shield.Shield``)."""
+
+    mode: str
+
+    @property
+    def enabled(self) -> bool: ...
+
+    def reset(self) -> None: ...
+
+    def apply(self, view: WorldView, proposal: Sequence[Action]) -> tuple[list[Action], list[Any]]:
+        """The proposal reaching the arbiter and the interventions (each has ``to_json``)."""
+        ...
+
+    def stats(self) -> dict[str, Any]: ...
+
+
 @dataclass(frozen=True)
 class StepOutcome:
+    """One step's result. ``actions`` is the controller's raw proposal ``a^ctrl``; ``events`` the
+    conflicts of the proposal reaching the arbiter (``a^arb``, after the shield);
+    ``reference_events`` / ``controller_events`` the counterfactual sets ``K^ref`` / ``K^ctrl``
+    (``None`` without suggestions); ``shield_events`` the shield's interventions."""
+
     t: int  # time after the step
     actions: tuple[Action, ...]
     events: frozenset[ConflictEvent]
@@ -95,6 +121,9 @@ class StepOutcome:
     reference_events: frozenset[ConflictEvent] | None
     terminated: bool
     truncated: bool
+    controller_events: frozenset[ConflictEvent] | None = None
+    arbitrated_actions: tuple[Action, ...] | None = None
+    shield_events: tuple[Any, ...] = ()
 
     @property
     def done(self) -> bool:
@@ -138,9 +167,13 @@ class Engine:
         trace: TraceWriter | None = None,
         stop_when_done: bool = True,
         max_steps: int | None = None,
+        shield: SafetyLayer | None = None,
+        controller_stats: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         scenario.validate()
         self.scenario = scenario
+        self.shield = shield if shield is not None and shield.enabled else None
+        self.controller_stats = controller_stats  # adds extra["controller"] to the summary
         self.coordinator: Coordinator = coordinator or NullCoordinator()
         self._reporting = self.coordinator if isinstance(self.coordinator, PlanReporting) else None
         self.seed = scenario.seed if seed is None else seed
@@ -169,6 +202,9 @@ class Engine:
         self.arrivals = self._make_arrivals()
         self.events = MapEventSchedule(MapEvent(e.time, e.cell, e.block) for e in spec.map_events)
         self.metrics = MetricsRecorder(len(self.robots), spec.num_priorities)
+        if self.shield is not None:
+            self.shield.reset()
+            self.metrics.enable_shield()
         self.t = 0
         self.terminated = False
         self.truncated = False
@@ -288,8 +324,13 @@ class Engine:
             if goal is not None and not self.oracle.reachable(r.position, goal):
                 blocked_goal += 1
 
-        # 5. shield: identity until Issue #4
+        # 5. shield (a^ctrl → a^arb); identity without one
+        shield_events: list[Any] = []
         arb_proposal = proposal
+        if self.shield is not None:
+            arb_proposal, shield_events = self.shield.apply(pending.view, proposal)
+            if not shield_events:
+                arb_proposal = proposal  # nothing replaced: same object, no second detection
 
         # 6. detection + arbitration + invariant
         events = detect_conflicts(
@@ -305,6 +346,15 @@ class Engine:
         # 7. counterfactual reference conflicts
         reference_events: frozenset[ConflictEvent] | None = None
         controller_events: frozenset[ConflictEvent] | None = None
+        if self.shield is not None:
+            raw = (
+                events
+                if arb_proposal is proposal
+                else detect_conflicts(
+                    t, positions, proposal, pending.obstacles_now, pending.obstacles_next, self.grid
+                )
+            )
+            self.metrics.record_shield(len(shield_events), raw, events)
         if pending.view.suggested is not None:
             ref = [
                 s if pending.view.masks[i][s] else Action.STAY
@@ -386,6 +436,9 @@ class Engine:
             reference_events=reference_events,
             terminated=self.terminated,
             truncated=self.truncated,
+            controller_events=controller_events,
+            arbitrated_actions=tuple(arb_proposal) if arb_proposal is not proposal else None,
+            shield_events=tuple(shield_events),
         )
         if self.done and self._reporting is not None:
             self._reporting.finish(self._build_view(None))
@@ -404,6 +457,10 @@ class Engine:
         metrics = self.metrics.summary(self.book, self.t)
         if self._reporting is not None:
             metrics.extra["planning"] = self._reporting.episode_stats()
+        if self.shield is not None:
+            metrics.extra["shield"] = {**self.shield.stats(), **self.metrics.shield_summary()}
+        if self.controller_stats is not None:
+            metrics.extra["controller"] = self.controller_stats()
         return metrics
 
     # ================================================================== views and traces
@@ -453,6 +510,7 @@ class Engine:
                 for tk in self.book.tasks.values()
             ],
             "coordinator": self.coordinator.name,
+            **({"shield": self.shield.mode} if self.shield is not None else {}),
         }
 
     def _step_record(self, out: StepOutcome, pending: _Pending) -> dict[str, object]:
@@ -489,8 +547,14 @@ class Engine:
             rec["map_events"] = [
                 [*e.cell, "block" if e.block else "unblock"] for e in out.map_events
             ]
+        if pending.view.suggested is not None:  # X-10: the real suggested actions (Issue #4)
+            rec["suggested"] = "".join(a.symbol for a in pending.view.suggested)
         if out.reference_events is not None:
             rec["reference_events"] = [e.to_json() for e in sorted(out.reference_events)]
+        if out.shield_events:
+            rec["shield"] = [e.to_json() for e in out.shield_events]
+            assert out.arbitrated_actions is not None
+            rec["arb_actions"] = "".join(a.symbol for a in out.arbitrated_actions)
         if self._reporting is not None:
             rec.update(self._reporting.trace_fields())
         return rec

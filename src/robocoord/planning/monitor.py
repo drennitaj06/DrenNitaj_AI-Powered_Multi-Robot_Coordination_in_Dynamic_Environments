@@ -1,10 +1,13 @@
-"""Path monitor: rejoin, replanning triggers T1–T6, stall block list, attribution (model §5.4;
+"""Path monitor: rejoin, replanning triggers T1–T8, stall block list, attribution (model §5.4;
 algorithms §5.2).
 
 The monitor is controller-agnostic: it only sees positions, goals and obstacles at the start of
 each step and decides whether a robot needs a new reference path. At most one planner call per
-robot per step; when several triggers fire, the call is attributed to the first in the order
-T1, T2, T3, T4, T5, T6. Every call goes through the shared procedure and is logged.
+robot per step, attributed to the first trigger found. The checks run in this order: goal changes
+(T1; T7 and T8 when the coordinator supplies a temporary goal), then T5 (no valid plan), T3
+(off-path), T2 (environment), T4 (stall) and T6 (degraded plan). T7 and T8 are produced only with
+the deadlock resolver and endpoint recovery, respectively. Every call goes through the shared
+procedure and is logged.
 
 Implementation choices (documented in ``04`` §5.2 notes):
 
@@ -25,7 +28,7 @@ Time: O(H_r + H_v) per robot per step, plus planner calls.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 import numpy as np
@@ -44,7 +47,10 @@ TRIGGERS: dict[str, str] = {
     "T4": "interaction",  # stall in front of an occupied cell
     "T5": "retry",  # previous call failed, cooldown elapsed
     "T6": "retry",  # degraded plan, cooldown elapsed
+    "T7": "deadlock",  # deadlock detour: goal set to / restored from a passing cell (Issue #4)
+    "T8": "endpoint",  # endpoint recovery: retreat / parking goal set or task goal restored
 }
+BASE_TRIGGERS: tuple[str, ...] = ("T1", "T2", "T3", "T4", "T5", "T6")
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +112,8 @@ class RobotPlanState:
     leg_moves: int = 0
     leg_ref: int | None = None
     leg_static: int | None = None
+    detour: bool = False  # the current goal is a deadlock-detour passing cell
+    task_goal: Cell | None = None  # the goal to restore after the detour
 
     @property
     def valid(self) -> bool:
@@ -114,9 +122,35 @@ class RobotPlanState:
 
 @dataclass(frozen=True, slots=True)
 class RobotInput:
+    """Per-step monitor input. The last four fields are used only by the deadlock resolver
+    (Issue #4 stage 5B) and endpoint recovery; their defaults give exactly the Issue #3
+    behaviour.
+
+    * ``detour`` — ``goal`` is a temporary cell (a passing, retreat or parking cell): the goal
+      change is attributed to ``trigger`` and the current leg is neither closed nor restarted;
+      restoring the saved task goal is attributed to ``trigger`` too.
+    * ``hold_stall`` — suspend the T4 stall counter (a detour is resolving this robot's stall).
+    * ``avoid`` — extra dynamically blocked cells for this step's checks and plans.
+    * ``trigger`` — the attribution of such a goal change: ``T7`` (deadlock resolver) or ``T8``
+      (endpoint recovery).
+    * ``count_active`` — False for an *idle* robot driving to a parking cell: its steps are not
+      counted in ``active_robot_steps`` and its T3 calls not in ``deviations``, so the deviation
+      rate keeps its definition (T3 per 100 non-idle robot-steps, model §9.3).
+    """
+
     id: int
     position: Cell
     goal: Cell | None
+    detour: bool = False
+    hold_stall: bool = False
+    avoid: frozenset[Cell] = frozenset()
+    trigger: str = "T7"
+    count_active: bool = True
+
+
+def _extra(st: RobotPlanState, r: RobotInput) -> Iterable[Cell]:
+    """Stall block list plus the resolver's per-step ``avoid`` cells (unchanged if empty)."""
+    return st.blocks if not r.avoid else set(st.blocks) | r.avoid
 
 
 class PathMonitor:
@@ -145,6 +179,7 @@ class PathMonitor:
         self.calls: list[PlanCall] = []
         self.legs: list[LegRecord] = []
         self.active_robot_steps = 0
+        self.deviations = 0  # T3 calls of counted (non-idle) robots
         self.last_results: dict[int, PlanResult] = {}
 
     # ------------------------------------------------------------------ per step
@@ -155,8 +190,13 @@ class PathMonitor:
         occupied = {r.position for r in robots} | set(obstacles)
         made: list[PlanCall] = []
         for r in robots:
+            before = self.active_robot_steps
             trigger = self._bookkeep(t, r, obstacles, occupied)
+            if not r.count_active:
+                self.active_robot_steps = before
             if trigger is not None:
+                if trigger == "T3" and r.count_active:
+                    self.deviations += 1
                 made.append(self._plan(t, r, trigger, obstacles))
         self.calls.extend(made)
         return made
@@ -170,9 +210,26 @@ class PathMonitor:
             st.leg_moves += 1
         st.last_pos = pos
         st.blocks = {c: e for c, e in st.blocks.items() if e > t}
+        if (
+            goal != st.goal
+            and goal is not None
+            and (r.detour or (st.detour and goal == st.task_goal))
+        ):
+            # T7 / T8: into a temporary cell, between temporary cells, or back to the saved task
+            # goal. The leg (trip to the task goal) continues: no close, no restart.
+            if not st.detour:
+                st.task_goal = st.goal
+            st.goal, st.path, st.index, st.degraded, st.stall = goal, None, 0, False, 0
+            st.blocks.clear()
+            st.detour = r.detour
+            if not r.detour:
+                st.task_goal = None
+            self.active_robot_steps += 1
+            return r.trigger
         if goal != st.goal:
-            if st.goal is not None and pos == st.goal:
+            if st.goal is not None and pos == st.goal and not st.detour:
                 self._close_leg(r.id, t)
+            st.detour, st.task_goal = False, None
             st.goal, st.path, st.index, st.degraded, st.stall = goal, None, 0, False, 0
             st.blocks.clear()
             if goal is None:
@@ -207,7 +264,7 @@ class PathMonitor:
         dynamic: frozenset[Cell] = frozenset()
         if not st.degraded:
             dynamic = build_constraints(
-                self.grid, pos, goal, obstacles, self.constraint_params, st.blocks
+                self.grid, pos, goal, obstacles, self.constraint_params, _extra(st, r)
             ).dynamic_blocked
         if self.grid.is_blocked(goal):  # a map event closed the goal cell (model §5.3 step 4)
             return "T2"
@@ -216,7 +273,9 @@ class PathMonitor:
                 return "T2"
         # ---- T4: stall in front of an occupied cell
         nxt = path[st.index + 1]
-        if nxt in occupied and nxt != goal:
+        if r.hold_stall:
+            st.stall = 0  # a deadlock detour is resolving this stall (T7), not T4
+        elif nxt in occupied and nxt != goal:
             st.stall += 1
             if st.stall >= p.stall_threshold:
                 st.stall = 0
@@ -235,7 +294,7 @@ class PathMonitor:
         st = self.states[r.id]
         assert st.goal is not None
         constraints = build_constraints(
-            self.grid, r.position, st.goal, obstacles, self.constraint_params, st.blocks
+            self.grid, r.position, st.goal, obstacles, self.constraint_params, _extra(st, r)
         )
         rng = np.random.default_rng(np.random.SeedSequence(self.seed, spawn_key=(t, r.id)))
         res = plan_with_procedure(
@@ -278,7 +337,7 @@ class PathMonitor:
             if st.last_pos is not None and pos != st.last_pos:
                 st.leg_moves += 1
             st.last_pos = pos
-            if st.goal is not None and pos == st.goal:
+            if st.goal is not None and pos == st.goal and not st.detour:
                 self._close_leg(i, t)
                 st.goal, st.path = None, None
 
@@ -287,6 +346,14 @@ class PathMonitor:
         st = self.states[robot]
         st.goal, st.path, st.index, st.degraded, st.stall = None, None, 0, False, 0
         st.blocks.clear()
+        st.detour, st.task_goal = False, None
+
+    def next_cell(self, robot: int, position: Cell) -> Cell | None:
+        """``c_{ℓ+1}`` if the robot is on a valid plan and not at its goal, else ``None``."""
+        st = self.states[robot]
+        if st.path is None or st.index >= len(st.path) - 1 or st.path[st.index] != position:
+            return None
+        return st.path[st.index + 1]
 
     # ------------------------------------------------------------------ queries
     def suggested(self, robot: int, position: Cell) -> Action:
