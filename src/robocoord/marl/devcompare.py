@@ -13,6 +13,20 @@ bootstrap 95 % CI, the Wilcoxon signed-rank p-value, the matched-pairs rank-bise
 Holm–Bonferroni within each metric's family, and a two-level bootstrap pooled over the policies
 (resample policies, then instances). Every number comes from the stored records.
 
+Issue #6 generalisation (additive; the Issue #5 analysis is reproduced unchanged by the defaults):
+
+* learned policies are recognised by their label prefix (``madql``, ``mappo``, ``ippo``) and the
+  comparators are the non-learned controllers present in the records (``baseline``,
+  ``baseline-noresolver``, ``reference``);
+* the absolute conflict metrics of D10 can be analysed as separate families
+  (``conflicts_total`` per episode, ``conflicts_per_delivered``; the latter is derived for Issue #5
+  records, and instances where it is undefined are excluded and counted);
+* :func:`algorithm_bootstrap` compares two algorithms (or an algorithm and a non-learned
+  controller) with a two-level bootstrap that resamples the **training seeds independently per
+  algorithm** and the **instances jointly** (paired);
+* :func:`load_records` reads stored ``records.jsonl`` files read-only, so historical records are
+  reused, never rewritten.
+
 Usage::
 
     python -m robocoord.marl.devcompare --policy results/training/madql_seed1/best.pt \\
@@ -36,7 +50,26 @@ from robocoord.marl.evaluation import EvalTask, run_tasks, summarise
 from robocoord.marl.scenarios import BLOCK_B, BLOCK_B_RRT, LEVELS, check_seeds
 
 METRICS = ("completion", "base_return", "conflicts_per_100")
+#: Issue #6 adds the absolute conflict metrics (D10) as separate families.
+METRICS_ISSUE6 = (*METRICS, "conflicts_total", "conflicts_per_delivered")
 COMPARATORS = ("baseline", "reference")
+ALL_COMPARATORS = ("baseline", "baseline-noresolver", "reference")
+LEARNED_PREFIXES = ("madql", "mappo", "ippo")
+
+
+def metric_value(r: dict[str, Any], metric: str) -> float | None:
+    """A record's metric; ``conflicts_per_delivered`` is derived when the record predates it."""
+    if metric == "conflicts_per_delivered" and metric not in r:
+        d = int(r["delivered"])
+        return float(r["conflicts_total"]) / d if d else None
+    v = r.get(metric)
+    return None if v is None else float(v)
+
+
+def load_records(path: str | Path) -> list[dict[str, Any]]:
+    """Read a ``records.jsonl`` file (read-only)."""
+    with Path(path).open(encoding="utf-8") as fh:
+        return [json.loads(line) for line in fh if line.strip()]
 
 
 def tasks_for(controller: str, label: str, checkpoint: str | None = None) -> list[EvalTask]:
@@ -74,28 +107,57 @@ def two_level_bootstrap(
     return {"mean": float(np.mean([a.mean() for a in arr])), "low": float(lo), "high": float(hi)}
 
 
-def analyse(records: list[dict[str, Any]]) -> dict[str, Any]:
+def _is_learned(label: str) -> bool:
+    return label.startswith(LEARNED_PREFIXES)
+
+
+def paired_values(
+    a: dict[tuple[str, str, int], dict[str, Any]],
+    b: dict[tuple[str, str, int], dict[str, Any]],
+    metric: str,
+    planner: str,
+) -> tuple[list[tuple[str, str, int]], list[float], list[float], int]:
+    """Instances of ``planner`` present in both, with the metric defined in both; returns the
+    keys, the two value lists and the number of instances excluded as undefined."""
+    keys, x, y, excluded = [], [], [], 0
+    for k in sorted(k for k in a if k[0] == planner and k in b):
+        va, vb = metric_value(a[k], metric), metric_value(b[k], metric)
+        if va is None or vb is None:
+            excluded += 1
+            continue
+        keys.append(k)
+        x.append(va)
+        y.append(vb)
+    return keys, x, y, excluded
+
+
+def analyse(
+    records: list[dict[str, Any]],
+    metrics: Sequence[str] = METRICS,
+    comparators: Sequence[str] | None = None,
+) -> dict[str, Any]:
     by_label: dict[str, dict[tuple[str, str, int], dict[str, Any]]] = {}
     for r in records:
         by_label.setdefault(r["label"], {})[_key(r)] = r
-    policies = sorted(k for k in by_label if k.startswith("madql"))
+    policies = sorted(k for k in by_label if _is_learned(k))
+    comps = [c for c in (comparators or ALL_COMPARATORS) if c in by_label]
     out: dict[str, Any] = {"summaries": {}, "paired": [], "pooled": []}
     for label, recs in sorted(by_label.items()):
         for planner in ("astar", "rrtstar"):
             rs = [r for k, r in recs.items() if k[0] == planner]
             if rs:
                 out["summaries"][f"{label}/{planner}"] = summarise(rs)
-    for metric in METRICS:
+    for metric in metrics:
         family: list[dict[str, Any]] = []
-        for comp in COMPARATORS:
+        for comp in comps:
             for planner in ("astar", "rrtstar"):
                 pooled: list[list[float]] = []
                 for pol in policies:
-                    keys = sorted(k for k in by_label[pol] if k[0] == planner)
+                    keys, x, y, excluded = paired_values(
+                        by_label[pol], by_label[comp], metric, planner
+                    )
                     if not keys:
                         continue
-                    x = [float(by_label[pol][k][metric]) for k in keys]
-                    y = [float(by_label[comp][k][metric]) for k in keys]
                     est = paired_bootstrap(x, y)
                     row = {
                         "metric": metric,
@@ -109,6 +171,8 @@ def analyse(records: list[dict[str, Any]]) -> dict[str, Any]:
                         "wilcoxon_p": wilcoxon_p(x, y),
                         "rank_biserial": rank_biserial(x, y),
                     }
+                    if excluded:
+                        row["excluded_undefined"] = excluded
                     family.append(row)
                     pooled.append([a - b for a, b in zip(x, y, strict=True)])
                 if pooled:
@@ -125,6 +189,37 @@ def analyse(records: list[dict[str, Any]]) -> dict[str, Any]:
             row["holm_p"] = adj
         out["paired"].extend(family)
     return out
+
+
+def algorithm_bootstrap(
+    x: Sequence[Sequence[float]],
+    y: Sequence[Sequence[float]],
+    *,
+    n_boot: int = 10_000,
+    seed: int = 0,
+) -> dict[str, float]:
+    """Algorithm X − algorithm Y on paired instances (Issue #6, ``05`` B.3).
+
+    ``x[p][i]`` is the metric of X's policy (training seed) ``p`` on instance ``i``, likewise
+    ``y``; all policies share the instance order. Each replicate resamples the instances once
+    (shared, so the pairing is kept) and the training seeds of each algorithm independently. A
+    non-learned comparator is an algorithm with one "policy". Returns the mean difference and the
+    percentile 95 % CI.
+    """
+    ax = np.asarray(x, dtype=np.float64)
+    ay = np.asarray(y, dtype=np.float64)
+    if ax.ndim != 2 or ay.ndim != 2 or ax.shape[1] != ay.shape[1]:
+        raise ValueError("x and y must be (policies, instances) arrays over the same instances")
+    rng = np.random.default_rng(seed)
+    n = ax.shape[1]
+    boots = np.empty(n_boot)
+    for b in range(n_boot):
+        inst = rng.integers(0, n, n)
+        px = rng.integers(0, ax.shape[0], ax.shape[0])
+        py = rng.integers(0, ay.shape[0], ay.shape[0])
+        boots[b] = ax[np.ix_(px, inst)].mean() - ay[np.ix_(py, inst)].mean()
+    lo, hi = np.quantile(boots, [0.025, 0.975])
+    return {"mean": float(ax.mean() - ay.mean()), "low": float(lo), "high": float(hi)}
 
 
 def _fmt(v: float | None, nd: int = 3) -> str:

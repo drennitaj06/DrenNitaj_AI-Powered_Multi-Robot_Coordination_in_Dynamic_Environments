@@ -71,3 +71,55 @@ def test_two_level_bootstrap_brackets_the_mean() -> None:
     r = two_level_bootstrap(diffs, n_boot=2000)
     assert r["mean"] == pytest.approx(2.0) and r["low"] <= 2.0 <= r["high"]
     assert r["low"] >= 1.0 and r["high"] <= 3.0
+
+
+# ---------------------------------------------------------------------------------- Issue #6
+def test_issue6_comparators_learned_prefixes_and_derived_metrics() -> None:
+    from robocoord.marl.devcompare import METRICS_ISSUE6, metric_value
+
+    recs = []
+    for s in range(10_020, 10_030):
+        recs += [fake("baseline", "astar", s, 0.9), fake("baseline-noresolver", "astar", s, 0.7)]
+        recs += [fake("reference", "astar", s, 0.6), fake("mappo-seed1", "astar", s, 0.8)]
+        recs += [fake("ippo-seed1", "astar", s, 0.0 if s == 10_020 else 0.5)]
+    for r in recs:
+        r["conflicts_total"] = 3
+    a = analyse(recs, metrics=METRICS_ISSUE6)
+    pairs = {(r["metric"], r["policy"], r["comparator"]) for r in a["paired"]}
+    assert ("completion", "mappo-seed1", "baseline-noresolver") in pairs
+    assert ("conflicts_total", "ippo-seed1", "reference") in pairs
+    per_del = [r for r in a["paired"] if r["metric"] == "conflicts_per_delivered"
+               and r["policy"] == "ippo-seed1"]  # fmt: skip
+    # the instance with nothing delivered is excluded (undefined ratio) and counted
+    assert all(r["n"] == 9 and r["excluded_undefined"] == 1 for r in per_del)
+    # Holm runs within each metric family, which now includes the matched baseline
+    fam = [r for r in a["paired"] if r["metric"] == "completion"]
+    assert len(fam) == 2 * 3 and all(r["holm_p"] >= r["wilcoxon_p"] for r in fam)
+    # Issue #5 records have no conflicts_per_delivered: it is derived
+    assert metric_value({"conflicts_total": 6, "delivered": 3}, "conflicts_per_delivered") == 2.0
+    assert metric_value({"conflicts_total": 6, "delivered": 0}, "conflicts_per_delivered") is None
+
+
+def test_algorithm_bootstrap_resamples_seeds_and_shares_instances() -> None:
+    from robocoord.marl.devcompare import algorithm_bootstrap
+
+    x = [np.arange(30, dtype=float) + 2.0, np.arange(30, dtype=float) + 4.0]
+    y = [np.arange(30, dtype=float)]
+    r = algorithm_bootstrap(x, y, n_boot=2000)
+    assert r["mean"] == pytest.approx(3.0)
+    # instance resampling is shared, so the large between-instance spread cancels: the CI only
+    # reflects the between-seed spread of X (2 or 4)
+    assert 2.0 - 1e-9 <= r["low"] <= r["high"] <= 4.0 + 1e-9
+    assert r["high"] - r["low"] > 1.0  # the seed spread is reflected, not hidden
+    with pytest.raises(ValueError):
+        algorithm_bootstrap(x, [np.arange(29, dtype=float)])
+
+
+def test_load_records_reads_jsonl(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    import json
+
+    from robocoord.marl.devcompare import load_records
+
+    p = tmp_path / "records.jsonl"
+    p.write_text(json.dumps({"a": 1}) + "\n\n" + json.dumps({"a": 2}) + "\n")
+    assert load_records(p) == [{"a": 1}, {"a": 2}]
