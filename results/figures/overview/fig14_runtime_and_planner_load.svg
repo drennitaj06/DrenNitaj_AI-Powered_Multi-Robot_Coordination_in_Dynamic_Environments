@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 487" width="1180" height="487" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Fig. 14 — Where the time goes: planner load and step-time composition">
+<title>Fig. 14 — Where the time goes: planner load and step-time composition</title>
+<rect width="1180" height="487" fill="#fcfcfb"/>
+<text x="24" y="30" font-size="16" font-weight="650" fill="#0b0b0b">Fig. 14 — Where the time goes: planner load and step-time composition</text>
+<text x="24" y="50" font-size="11.5" fill="#52514e">(a) RRT* training pilot; (b) planner calls caused by each controller (block B, A*); (c) per-step time by component, non-learned system (NFR-PERF-1 verification)</text>
+<rect x="26.2" y="64.2" width="7.6" height="7.6" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="40.0" y="72.0" font-size="11.5" fill="#0b0b0b">A*</text>
+<circle cx="82.4" cy="68.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="92.4" y="72.0" font-size="11.5" fill="#0b0b0b">RRT*</text>
+<rect x="143.2" y="62.0" width="11" height="11" fill="#2a78d6" rx="2"/>
+<text x="159.2" y="72.0" font-size="11.5" fill="#0b0b0b">allocation</text>
+<rect x="253.2" y="62.0" width="11" height="11" fill="#3d3c39" rx="2"/>
+<text x="269.2" y="72.0" font-size="11.5" fill="#0b0b0b">planning (A*)</text>
+<rect x="384.8" y="62.0" width="11" height="11" fill="#e87ba4" rx="2"/>
+<text x="400.8" y="72.0" font-size="11.5" fill="#0b0b0b">deadlock</text>
+<rect x="480.4" y="62.0" width="11" height="11" fill="#6250d6" rx="2"/>
+<text x="496.4" y="72.0" font-size="11.5" fill="#0b0b0b">endpoint</text>
+<rect x="576.0" y="62.0" width="11" height="11" fill="#1baf7a" rx="2"/>
+<text x="592.0" y="72.0" font-size="11.5" fill="#0b0b0b">controller</text>
+<rect x="686.0" y="62.0" width="11" height="11" fill="#a8a7a0" rx="2"/>
+<text x="702.0" y="72.0" font-size="11.5" fill="#0b0b0b">engine rest</text>
+<clipPath id="c1839948625104"><rect x="72" y="112" width="296" height="296"/></clipPath>
+<line x1="80" x2="360" y1="400.0" y2="400.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="403.8" text-anchor="end" font-size="10.5" fill="#52514e">0.1</text>
+<line x1="80" x2="360" y1="330.0" y2="330.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="333.8" text-anchor="end" font-size="10.5" fill="#52514e">1</text>
+<line x1="80" x2="360" y1="260.0" y2="260.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="263.8" text-anchor="end" font-size="10.5" fill="#52514e">10</text>
+<line x1="80" x2="360" y1="190.0" y2="190.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="193.8" text-anchor="end" font-size="10.5" fill="#52514e">100</text>
+<line x1="80" x2="360" y1="120.0" y2="120.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="123.8" text-anchor="end" font-size="10.5" fill="#52514e">1000</text>
+<text x="126.7" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">stage 1</text>
+<text x="220.0" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">stage 2</text>
+<text x="313.3" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">stage 3</text>
+<line x1="80" x2="360" y1="400" y2="400" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="80" x2="80" y1="120" y2="400" stroke="#b9b8b2" stroke-width="1"/>
+<text x="80" y="108" font-size="12.5" font-weight="600" fill="#0b0b0b">(a) Mean env-step time in PPO training</text>
+<text x="34.0" y="260.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 34.0 260.0)">ms per environment step (log)</text>
+<g clip-path="url(#c1839948625104)">
+<rect x="112.1" y="339.1" width="6.8" height="6.8" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>astar/ppo stage 1: 0.66 ms/step, planner share 0.030</title></rect>
+<rect x="205.4" y="334.5" width="6.8" height="6.8" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>astar/ppo stage 2: 0.77 ms/step, planner share 0.035</title></rect>
+<rect x="298.7" y="305.8" width="6.8" height="6.8" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>astar/ppo stage 3: 1.98 ms/step, planner share 0.045</title></rect>
+<rect x="134.5" y="345.3" width="6.8" height="6.8" rx="1" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>astar/reference stage 1: 0.54 ms/step, planner share 0.007</title></rect>
+<rect x="227.8" y="345.9" width="6.8" height="6.8" rx="1" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>astar/reference stage 2: 0.53 ms/step, planner share 0.005</title></rect>
+<rect x="321.1" y="321.3" width="6.8" height="6.8" rx="1" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>astar/reference stage 3: 1.19 ms/step, planner share 0.010</title></rect>
+<circle cx="115.5" cy="187.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>rrtstar/ppo stage 1: 108.10 ms/step, planner share 0.976</title></circle>
+<circle cx="208.8" cy="182.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>rrtstar/ppo stage 2: 127.54 ms/step, planner share 0.971</title></circle>
+<circle cx="302.1" cy="181.8" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>rrtstar/ppo stage 3: 130.82 ms/step, planner share 0.962</title></circle>
+<circle cx="137.9" cy="243.9" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>rrtstar/reference stage 1: 16.99 ms/step, planner share 0.873</title></circle>
+<circle cx="231.2" cy="242.6" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>rrtstar/reference stage 2: 17.74 ms/step, planner share 0.850</title></circle>
+<circle cx="324.5" cy="248.4" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>rrtstar/reference stage 3: 14.63 ms/step, planner share 0.808</title></circle>
+</g>
+<clipPath id="c1839948623984"><rect x="462" y="112" width="296" height="296"/></clipPath>
+<line x1="470" x2="750" y1="400.0" y2="400.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="463" y="403.8" text-anchor="end" font-size="10.5" fill="#52514e">0</text>
+<line x1="470" x2="750" y1="330.0" y2="330.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="463" y="333.8" text-anchor="end" font-size="10.5" fill="#52514e">10</text>
+<line x1="470" x2="750" y1="260.0" y2="260.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="463" y="263.8" text-anchor="end" font-size="10.5" fill="#52514e">20</text>
+<line x1="470" x2="750" y1="190.0" y2="190.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="463" y="193.8" text-anchor="end" font-size="10.5" fill="#52514e">30</text>
+<line x1="470" x2="750" y1="120.0" y2="120.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="463" y="123.8" text-anchor="end" font-size="10.5" fill="#52514e">40</text>
+<text x="493.3" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">baseline</text>
+<text x="540.0" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">matched</text>
+<text x="586.7" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">reference</text>
+<text x="633.3" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">MADQL</text>
+<text x="680.0" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">MAPPO</text>
+<text x="726.7" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">IPPO</text>
+<line x1="470" x2="750" y1="400" y2="400" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="470" x2="470" y1="120" y2="400" stroke="#b9b8b2" stroke-width="1"/>
+<text x="470" y="108" font-size="12.5" font-weight="600" fill="#0b0b0b">(b) Planner calls per 100 robot-steps</text>
+<text x="424.0" y="260.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 424.0 260.0)">calls (A*)</text>
+<g clip-path="url(#c1839948623984)">
+<rect x="480.3" y="361.4" width="26" height="38.6" fill="#3d3c39" rx="2"><title>baseline: 5.51 calls / 100 robot-steps; off-path (T3) 0.0 / 100</title></rect>
+<text x="493.3" y="355.4" text-anchor="middle" font-size="10.5" fill="#52514e" font-weight="normal">5.5</text>
+<rect x="527.0" y="354.6" width="26" height="45.4" fill="#3d3c39" rx="2"><title>matched: 6.48 calls / 100 robot-steps; off-path (T3) 0.0 / 100</title></rect>
+<text x="540.0" y="348.6" text-anchor="middle" font-size="10.5" fill="#52514e" font-weight="normal">6.5</text>
+<rect x="573.7" y="376.3" width="26" height="23.7" fill="#77766f" rx="2"><title>reference: 3.39 calls / 100 robot-steps; off-path (T3) 0.0 / 100</title></rect>
+<text x="586.7" y="370.3" text-anchor="middle" font-size="10.5" fill="#52514e" font-weight="normal">3.4</text>
+<rect x="620.3" y="168.3" width="26" height="231.7" fill="#2a78d6" rx="2"><title>MADQL: 33.09 calls / 100 robot-steps; off-path (T3) 35.5 / 100</title></rect>
+<text x="633.3" y="162.3" text-anchor="middle" font-size="10.5" fill="#52514e" font-weight="normal">33.1</text>
+<rect x="667.0" y="324.7" width="26" height="75.3" fill="#eb6834" rx="2"><title>MAPPO: 10.76 calls / 100 robot-steps; off-path (T3) 11.0 / 100</title></rect>
+<text x="680.0" y="318.7" text-anchor="middle" font-size="10.5" fill="#52514e" font-weight="normal">10.8</text>
+<rect x="713.7" y="321.1" width="26" height="78.9" fill="#1baf7a" rx="2"><title>IPPO: 11.27 calls / 100 robot-steps; off-path (T3) 13.0 / 100</title></rect>
+<text x="726.7" y="315.1" text-anchor="middle" font-size="10.5" fill="#52514e" font-weight="normal">11.3</text>
+</g>
+<clipPath id="c1839948624432"><rect x="872" y="112" width="286" height="296"/></clipPath>
+<line x1="880" x2="1150" y1="400.0" y2="400.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="873" y="403.8" text-anchor="end" font-size="10.5" fill="#52514e">0</text>
+<line x1="880" x2="1150" y1="341.7" y2="341.7" stroke="#e6e5e1" stroke-width="1"/>
+<text x="873" y="345.5" text-anchor="end" font-size="10.5" fill="#52514e">2.5</text>
+<line x1="880" x2="1150" y1="283.3" y2="283.3" stroke="#e6e5e1" stroke-width="1"/>
+<text x="873" y="287.1" text-anchor="end" font-size="10.5" fill="#52514e">5</text>
+<line x1="880" x2="1150" y1="225.0" y2="225.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="873" y="228.8" text-anchor="end" font-size="10.5" fill="#52514e">7.5</text>
+<line x1="880" x2="1150" y1="166.7" y2="166.7" stroke="#e6e5e1" stroke-width="1"/>
+<text x="873" y="170.5" text-anchor="end" font-size="10.5" fill="#52514e">10</text>
+<text x="947.5" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">mean</text>
+<text x="1082.5" y="416.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">p99 step</text>
+<line x1="880" x2="1150" y1="400" y2="400" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="880" x2="880" y1="120" y2="400" stroke="#b9b8b2" stroke-width="1"/>
+<text x="880" y="108" font-size="12.5" font-weight="600" fill="#0b0b0b">(c) Step time by component</text>
+<text x="834.0" y="260.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 834.0 260.0)">milliseconds per step</text>
+<g clip-path="url(#c1839948624432)">
+<rect x="924.5" y="398.1" width="46" height="1.9" fill="#2a78d6" rx="2"><title>allocation: 0.080 ms (all steps)</title></rect>
+<rect x="924.5" y="395.9" width="46" height="2.2" fill="#3d3c39" rx="2"><title>planning (A*): 0.095 ms (all steps)</title></rect>
+<rect x="924.5" y="395.7" width="46" height="0.5" fill="#e87ba4" rx="2"><title>deadlock: 0.008 ms (all steps)</title></rect>
+<rect x="924.5" y="395.5" width="46" height="0.5" fill="#6250d6" rx="2"><title>endpoint: 0.012 ms (all steps)</title></rect>
+<rect x="924.5" y="394.9" width="46" height="0.5" fill="#1baf7a" rx="2"><title>controller: 0.023 ms (all steps)</title></rect>
+<rect x="924.5" y="387.4" width="46" height="7.6" fill="#a8a7a0" rx="2"><title>engine rest: 0.325 ms (all steps)</title></rect>
+<rect x="1059.5" y="312.4" width="46" height="87.6" fill="#2a78d6" rx="2"><title>allocation: 3.753 ms (slowest 1 %)</title></rect>
+<rect x="1059.5" y="295.2" width="46" height="17.2" fill="#3d3c39" rx="2"><title>planning (A*): 0.738 ms (slowest 1 %)</title></rect>
+<rect x="1059.5" y="295.0" width="46" height="0.5" fill="#e87ba4" rx="2"><title>deadlock: 0.009 ms (slowest 1 %)</title></rect>
+<rect x="1059.5" y="294.6" width="46" height="0.5" fill="#6250d6" rx="2"><title>endpoint: 0.019 ms (slowest 1 %)</title></rect>
+<rect x="1059.5" y="293.8" width="46" height="0.7" fill="#1baf7a" rx="2"><title>controller: 0.031 ms (slowest 1 %)</title></rect>
+<rect x="1059.5" y="268.8" width="46" height="25.1" fill="#a8a7a0" rx="2"><title>engine rest: 1.075 ms (slowest 1 %)</title></rect>
+</g>
+<text x="24" y="442.0" font-size="10.5" fill="#8a8984">(a) filled = untrained PPO actor, hollow = reference-follower actions. (b) learned controllers leave the reference path (trigger T3) 11–36 times per 100 robot-steps; the baseline never does. (c)</text>
+<text x="24" y="457.0" font-size="10.5" fill="#8a8984">workload R, optimised implementation, A*; &#x27;p99 step&#x27; = mean composition of the slowest 1 % of steps.</text>
+<text x="24" y="472.0" font-size="10.5" fill="#8a8984">Sources: results/pilot_rrt/cells.jsonl, block-B records (Fig. 7), results/perf_verify/nfr_perf1_samples.csv.</text>
+</svg>

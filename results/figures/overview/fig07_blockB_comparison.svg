@@ -1,0 +1,281 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 578" width="1180" height="578" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Fig. 7 — Development comparison on validation block B (greedy, auction, shield off)">
+<title>Fig. 7 — Development comparison on validation block B (greedy, auction, shield off)</title>
+<rect width="1180" height="578" fill="#fcfcfb"/>
+<text x="24" y="30" font-size="16" font-weight="650" fill="#0b0b0b">Fig. 7 — Development comparison on validation block B (greedy, auction, shield off)</text>
+<text x="24" y="50" font-size="11.5" fill="#52514e">Filled = A* (240 episodes), hollow = RRT* (60 episodes); 95 % bootstrap CI over episodes</text>
+<circle cx="30.0" cy="68.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="40.0" y="72.0" font-size="11.5" fill="#0b0b0b">MADQL</text>
+<circle cx="104.0" cy="68.0" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="114.0" y="72.0" font-size="11.5" fill="#0b0b0b">MAPPO</text>
+<circle cx="178.0" cy="68.0" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="188.0" y="72.0" font-size="11.5" fill="#0b0b0b">IPPO</text>
+<rect x="241.0" y="64.2" width="7.6" height="7.6" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="254.8" y="72.0" font-size="11.5" fill="#0b0b0b">non-learned</text>
+<circle cx="362.0" cy="68.0" r="4.5" fill="#fcfcfb" stroke="#52514e" stroke-width="2"></circle>
+<text x="372.0" y="72.0" font-size="11.5" fill="#0b0b0b">RRT* (hollow)</text>
+<clipPath id="c1839948620848"><rect x="242" y="102" width="276" height="396"/></clipPath>
+<line x1="250" x2="510" y1="125.8" y2="125.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="129.8" text-anchor="end" font-size="11" fill="#0b0b0b">Baseline (resolver on)</text>
+<line x1="250" x2="510" y1="157.5" y2="157.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="161.5" text-anchor="end" font-size="11" fill="#0b0b0b">Matched baseline (resolver off)</text>
+<line x1="250" x2="510" y1="189.2" y2="189.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="193.2" text-anchor="end" font-size="11" fill="#0b0b0b">Reference follower</text>
+<line x1="250" x2="510" y1="220.8" y2="220.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="224.8" text-anchor="end" font-size="11" fill="#0b0b0b">MADQL 1</text>
+<line x1="250" x2="510" y1="252.5" y2="252.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="256.5" text-anchor="end" font-size="11" fill="#0b0b0b">MADQL 2</text>
+<line x1="250" x2="510" y1="284.2" y2="284.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="288.2" text-anchor="end" font-size="11" fill="#0b0b0b">MADQL 3</text>
+<line x1="250" x2="510" y1="315.8" y2="315.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="319.8" text-anchor="end" font-size="11" fill="#0b0b0b">MAPPO 1</text>
+<line x1="250" x2="510" y1="347.5" y2="347.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="351.5" text-anchor="end" font-size="11" fill="#0b0b0b">MAPPO 2</text>
+<line x1="250" x2="510" y1="379.2" y2="379.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="383.2" text-anchor="end" font-size="11" fill="#0b0b0b">MAPPO 3</text>
+<line x1="250" x2="510" y1="410.8" y2="410.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="414.8" text-anchor="end" font-size="11" fill="#0b0b0b">IPPO 1</text>
+<line x1="250" x2="510" y1="442.5" y2="442.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="446.5" text-anchor="end" font-size="11" fill="#0b0b0b">IPPO 2</text>
+<line x1="250" x2="510" y1="474.2" y2="474.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="478.2" text-anchor="end" font-size="11" fill="#0b0b0b">IPPO 3</text>
+<line x1="250.0" x2="250.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="250.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.5</text>
+<line x1="302.0" x2="302.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="302.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.6</text>
+<line x1="354.0" x2="354.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="354.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.7</text>
+<line x1="406.0" x2="406.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="406.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.8</text>
+<line x1="458.0" x2="458.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="458.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.9</text>
+<line x1="510.0" x2="510.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="510.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="250" x2="510" y1="490" y2="490" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="250" x2="250" y1="110" y2="490" stroke="#b9b8b2" stroke-width="1"/>
+<text x="250" y="98" font-size="12.5" font-weight="600" fill="#0b0b0b">(a) Completion</text>
+<text x="380.0" y="524.0" text-anchor="middle" font-size="11" fill="#52514e">delivered ÷ released</text>
+<g clip-path="url(#c1839948620848)">
+<line y1="120.1" y2="120.1" x1="509.1" x2="510.0" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<rect x="506.4" y="116.9" width="6.5" height="6.5" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on), A*: completion 0.999 [0.998, 1.000], n=240</title></rect>
+<line y1="131.5" y2="131.5" x1="506.4" x2="510.0" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<rect x="505.4" y="128.3" width="6.5" height="6.5" rx="1" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>Baseline (resolver on), RRT*: completion 0.997 [0.993, 1.000], n=60</title></rect>
+<line y1="151.8" y2="151.8" x1="499.3" x2="505.5" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="502.5,146.7 507.7,151.8 502.5,156.9 497.4,151.8" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off), A*: completion 0.986 [0.979, 0.991], n=240</title></polygon>
+<line y1="163.2" y2="163.2" x1="507.2" x2="510.0" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="509.1,158.1 514.2,163.2 509.1,168.3 504.0,163.2" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>Matched baseline (resolver off), RRT*: completion 0.998 [0.995, 1.000], n=60</title></polygon>
+<line y1="183.5" y2="183.5" x1="456.7" x2="470.4" stroke="#77766f" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="463.7,178.1 469.0,187.7 458.4,187.7" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower, A*: completion 0.911 [0.898, 0.924], n=240</title></polygon>
+<line y1="194.9" y2="194.9" x1="447.3" x2="472.5" stroke="#77766f" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="460.3,189.5 465.6,199.1 454.9,199.1" fill="#fcfcfb" stroke="#77766f" stroke-width="2"><title>Reference follower, RRT*: completion 0.904 [0.879, 0.928], n=60</title></polygon>
+<line y1="215.1" y2="215.1" x1="316.9" x2="349.8" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="333.5" cy="215.1" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 1, A*: completion 0.661 [0.629, 0.692], n=240</title></circle>
+<line y1="226.5" y2="226.5" x1="381.1" x2="416.1" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="399.4" cy="226.5" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 1, RRT*: completion 0.787 [0.752, 0.819], n=60</title></circle>
+<line y1="246.8" y2="246.8" x1="278.3" x2="308.0" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="293.5" cy="246.8" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 2, A*: completion 0.584 [0.554, 0.612], n=240</title></circle>
+<line y1="258.2" y2="258.2" x1="281.1" x2="331.6" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="306.6" cy="258.2" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 2, RRT*: completion 0.609 [0.560, 0.657], n=60</title></circle>
+<line y1="278.5" y2="278.5" x1="273.9" x2="304.1" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="289.0" cy="278.5" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 3, A*: completion 0.575 [0.546, 0.604], n=240</title></circle>
+<line y1="289.9" y2="289.9" x1="339.2" x2="374.0" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="356.4" cy="289.9" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 3, RRT*: completion 0.705 [0.672, 0.738], n=60</title></circle>
+<line y1="310.1" y2="310.1" x1="501.3" x2="505.9" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="503.7" cy="310.1" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 1, A*: completion 0.988 [0.983, 0.992], n=240</title></circle>
+<line y1="321.5" y2="321.5" x1="500.9" x2="507.8" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="504.7" cy="321.5" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 1, RRT*: completion 0.990 [0.983, 0.996], n=60</title></circle>
+<line y1="341.8" y2="341.8" x1="501.6" x2="506.0" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="503.9" cy="341.8" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 2, A*: completion 0.988 [0.984, 0.992], n=240</title></circle>
+<line y1="353.2" y2="353.2" x1="501.7" x2="508.2" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="505.1" cy="353.2" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 2, RRT*: completion 0.991 [0.984, 0.997], n=60</title></circle>
+<line y1="373.5" y2="373.5" x1="501.2" x2="505.8" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="503.6" cy="373.5" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 3, A*: completion 0.988 [0.983, 0.992], n=240</title></circle>
+<line y1="384.9" y2="384.9" x1="504.4" x2="509.6" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="507.3" cy="384.9" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 3, RRT*: completion 0.995 [0.989, 0.999], n=60</title></circle>
+<line y1="405.1" y2="405.1" x1="498.5" x2="503.1" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="500.8" cy="405.1" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 1, A*: completion 0.982 [0.978, 0.987], n=240</title></circle>
+<line y1="416.5" y2="416.5" x1="497.2" x2="505.0" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="501.1" cy="416.5" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 1, RRT*: completion 0.983 [0.975, 0.990], n=60</title></circle>
+<line y1="436.8" y2="436.8" x1="502.6" x2="506.3" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="504.5" cy="436.8" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 2, A*: completion 0.989 [0.986, 0.993], n=240</title></circle>
+<line y1="448.2" y2="448.2" x1="500.7" x2="508.2" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="504.7" cy="448.2" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 2, RRT*: completion 0.990 [0.982, 0.997], n=60</title></circle>
+<line y1="468.5" y2="468.5" x1="503.8" x2="507.3" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="505.6" cy="468.5" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 3, A*: completion 0.992 [0.988, 0.995], n=240</title></circle>
+<line y1="479.9" y2="479.9" x1="503.7" x2="508.7" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="506.4" cy="479.9" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 3, RRT*: completion 0.993 [0.988, 0.998], n=60</title></circle>
+</g>
+<clipPath id="c1839948621072"><rect x="562" y="102" width="276" height="396"/></clipPath>
+<line x1="570" x2="830" y1="125.8" y2="125.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="129.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="157.5" y2="157.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="161.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="189.2" y2="189.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="193.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="220.8" y2="220.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="224.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="252.5" y2="252.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="256.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="284.2" y2="284.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="288.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="315.8" y2="315.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="319.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="347.5" y2="347.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="351.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="379.2" y2="379.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="383.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="410.8" y2="410.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="414.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="442.5" y2="442.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="446.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="474.2" y2="474.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="478.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="593.7" x2="593.7" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="593.7" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="672.5" x2="672.5" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="672.5" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">10</text>
+<line x1="751.2" x2="751.2" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="751.2" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">100</text>
+<line x1="830.0" x2="830.0" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="830.0" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">1000</text>
+<line x1="570" x2="830" y1="490" y2="490" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="570" x2="570" y1="110" y2="490" stroke="#b9b8b2" stroke-width="1"/>
+<text x="570" y="98" font-size="12.5" font-weight="600" fill="#0b0b0b">(b) Proposed conflicts per episode</text>
+<text x="700.0" y="524.0" text-anchor="middle" font-size="11" fill="#52514e">conflicts (log)</text>
+<g clip-path="url(#c1839948621072)">
+<line y1="120.1" y2="120.1" x1="588.8" x2="599.6" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<rect x="591.2" y="116.9" width="6.5" height="6.5" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on), A*: conflicts/episode 1.021 [0.867, 1.188], n=240</title></rect>
+<line y1="131.5" y2="131.5" x1="572.2" x2="593.7" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<rect x="580.6" y="128.3" width="6.5" height="6.5" rx="1" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>Baseline (resolver on), RRT*: conflicts/episode 0.750 [0.533, 1.000], n=60</title></rect>
+<line y1="151.8" y2="151.8" x1="587.6" x2="599.6" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="593.9,146.7 599.0,151.8 593.9,156.9 588.7,151.8" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off), A*: conflicts/episode 1.004 [0.838, 1.188], n=240</title></polygon>
+<line y1="163.2" y2="163.2" x1="575.3" x2="595.4" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="586.1,158.1 591.2,163.2 586.1,168.3 580.9,163.2" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>Matched baseline (resolver off), RRT*: conflicts/episode 0.800 [0.583, 1.050], n=60</title></polygon>
+<line y1="183.5" y2="183.5" x1="794.0" x2="803.8" stroke="#77766f" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="799.3,178.1 804.6,187.7 794.0,187.7" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower, A*: conflicts/episode 407.946 [349.013, 465.202], n=240</title></polygon>
+<line y1="194.9" y2="194.9" x1="795.9" x2="816.1" stroke="#77766f" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="806.9,189.5 812.2,199.1 801.6,199.1" fill="#fcfcfb" stroke="#77766f" stroke-width="2"><title>Reference follower, RRT*: conflicts/episode 508.700 [368.965, 667.041], n=60</title></polygon>
+<line y1="215.1" y2="215.1" x1="631.5" x2="678.0" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="659.3" cy="215.1" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 1, A*: conflicts/episode 6.808 [3.016, 11.752], n=240</title></circle>
+<line y1="226.5" y2="226.5" x1="620.2" x2="702.7" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="674.8" cy="226.5" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 1, RRT*: conflicts/episode 10.717 [2.167, 24.167], n=60</title></circle>
+<line y1="246.8" y2="246.8" x1="585.7" x2="649.6" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="623.7" cy="246.8" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 2, A*: conflicts/episode 2.404 [0.792, 5.129], n=240</title></circle>
+<line y1="258.2" y2="258.2" x1="600.9" x2="635.1" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="619.4" cy="258.2" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 2, RRT*: conflicts/episode 2.117 [1.233, 3.350], n=60</title></circle>
+<line y1="278.5" y2="278.5" x1="590.4" x2="662.5" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="636.2" cy="278.5" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 3, A*: conflicts/episode 3.462 [0.908, 7.479], n=240</title></circle>
+<line y1="289.9" y2="289.9" x1="601.3" x2="697.9" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="666.8" cy="289.9" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 3, RRT*: conflicts/episode 8.483 [1.250, 21.036], n=60</title></circle>
+<line y1="310.1" y2="310.1" x1="721.4" x2="740.0" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="731.8" cy="310.1" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 1, A*: conflicts/episode 56.596 [41.750, 72.064], n=240</title></circle>
+<line y1="321.5" y2="321.5" x1="721.2" x2="755.6" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="740.7" cy="321.5" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 1, RRT*: conflicts/episode 73.483 [41.526, 113.553], n=60</title></circle>
+<line y1="341.8" y2="341.8" x1="672.6" x2="704.8" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="691.6" cy="341.8" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 2, A*: conflicts/episode 17.504 [10.045, 25.731], n=240</title></circle>
+<line y1="353.2" y2="353.2" x1="643.5" x2="708.8" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="683.8" cy="353.2" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 2, RRT*: conflicts/episode 13.933 [4.283, 28.917], n=60</title></circle>
+<line y1="373.5" y2="373.5" x1="718.8" x2="738.9" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="729.6" cy="373.5" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 3, A*: conflicts/episode 53.142 [38.722, 69.688], n=240</title></circle>
+<line y1="384.9" y2="384.9" x1="710.1" x2="746.9" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="731.8" cy="384.9" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 3, RRT*: conflicts/episode 56.683 [30.048, 88.134], n=60</title></circle>
+<line y1="405.1" y2="405.1" x1="608.2" x2="673.0" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="650.6" cy="405.1" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 1, A*: conflicts/episode 5.283 [1.529, 10.150], n=240</title></circle>
+<line y1="416.5" y2="416.5" x1="604.4" x2="640.6" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="624.1" cy="416.5" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 1, RRT*: conflicts/episode 2.433 [1.367, 3.933], n=60</title></circle>
+<line y1="436.8" y2="436.8" x1="656.9" x2="695.5" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="679.6" cy="436.8" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 2, A*: conflicts/episode 12.312 [6.346, 19.613], n=240</title></circle>
+<line y1="448.2" y2="448.2" x1="668.5" x2="727.3" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="707.3" cy="448.2" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 2, RRT*: conflicts/episode 27.700 [8.900, 49.667], n=60</title></circle>
+<line y1="468.5" y2="468.5" x1="633.6" x2="682.0" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="663.0" cy="468.5" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 3, A*: conflicts/episode 7.592 [3.207, 13.197], n=240</title></circle>
+<line y1="479.9" y2="479.9" x1="609.1" x2="629.5" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="620.2" cy="479.9" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 3, RRT*: conflicts/episode 2.167 [1.567, 2.850], n=60</title></circle>
+</g>
+<clipPath id="c1839948621296"><rect x="882" y="102" width="276" height="396"/></clipPath>
+<line x1="890" x2="1150" y1="125.8" y2="125.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="129.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="157.5" y2="157.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="161.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="189.2" y2="189.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="193.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="220.8" y2="220.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="224.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="252.5" y2="252.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="256.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="284.2" y2="284.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="288.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="315.8" y2="315.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="319.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="347.5" y2="347.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="351.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="379.2" y2="379.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="383.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="410.8" y2="410.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="414.8" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="442.5" y2="442.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="446.5" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="474.2" y2="474.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="478.2" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="909.3" x2="909.3" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="909.3" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">-20</text>
+<line x1="1005.6" x2="1005.6" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="1005.6" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">-10</text>
+<line x1="1101.9" x2="1101.9" y1="110" y2="490" stroke="#e6e5e1" stroke-width="1"/>
+<text x="1101.9" y="505.0" text-anchor="middle" font-size="10.5" fill="#52514e">0</text>
+<line x1="890" x2="1150" y1="490" y2="490" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="890" x2="890" y1="110" y2="490" stroke="#b9b8b2" stroke-width="1"/>
+<text x="890" y="98" font-size="12.5" font-weight="600" fill="#0b0b0b">(c) Mean discounted base return</text>
+<text x="1020.0" y="524.0" text-anchor="middle" font-size="11" fill="#52514e">return (default weights)</text>
+<g clip-path="url(#c1839948621296)">
+<line y1="120.1" y2="120.1" x1="1135.0" x2="1136.4" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<rect x="1132.5" y="116.9" width="6.5" height="6.5" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on), A*: base return 3.518 [3.446, 3.592], n=240</title></rect>
+<line y1="131.5" y2="131.5" x1="1131.7" x2="1134.7" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<rect x="1129.9" y="128.3" width="6.5" height="6.5" rx="1" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>Baseline (resolver on), RRT*: base return 3.252 [3.097, 3.411], n=60</title></rect>
+<line y1="151.8" y2="151.8" x1="1134.0" x2="1135.5" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="1134.8,146.7 1139.9,151.8 1134.8,156.9 1129.6,151.8" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off), A*: base return 3.419 [3.342, 3.498], n=240</title></polygon>
+<line y1="163.2" y2="163.2" x1="1131.6" x2="1134.6" stroke="#3d3c39" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="1133.1,158.1 1138.2,163.2 1133.1,168.3 1128.0,163.2" fill="#fcfcfb" stroke="#3d3c39" stroke-width="2"><title>Matched baseline (resolver off), RRT*: base return 3.245 [3.094, 3.405], n=60</title></polygon>
+<line y1="183.5" y2="183.5" x1="918.9" x2="967.1" stroke="#77766f" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="942.4,178.1 947.7,187.7 937.1,187.7" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower, A*: base return -16.561 [-18.998, -13.992], n=240</title></polygon>
+<line y1="194.9" y2="194.9" x1="839.9" x2="961.2" stroke="#77766f" stroke-width="1.5" stroke-linecap="round"></line>
+<polygon points="903.1,189.5 908.4,199.1 897.7,199.1" fill="#fcfcfb" stroke="#77766f" stroke-width="2"><title>Reference follower, RRT*: base return -20.643 [-27.206, -14.609], n=60</title></polygon>
+<line y1="215.1" y2="215.1" x1="1114.5" x2="1117.7" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1116.1" cy="215.1" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 1, A*: base return 1.484 [1.319, 1.642], n=240</title></circle>
+<line y1="226.5" y2="226.5" x1="1106.4" x2="1119.1" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1113.4" cy="226.5" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 1, RRT*: base return 1.197 [0.475, 1.791], n=60</title></circle>
+<line y1="246.8" y2="246.8" x1="1114.7" x2="1117.0" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1115.9" cy="246.8" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 2, A*: base return 1.460 [1.333, 1.575], n=240</title></circle>
+<line y1="258.2" y2="258.2" x1="1113.3" x2="1116.6" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1115.0" cy="258.2" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 2, RRT*: base return 1.366 [1.190, 1.537], n=60</title></circle>
+<line y1="278.5" y2="278.5" x1="1112.2" x2="1115.9" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1114.3" cy="278.5" r="3.8" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 3, A*: base return 1.294 [1.076, 1.461], n=240</title></circle>
+<line y1="289.9" y2="289.9" x1="1112.7" x2="1118.7" stroke="#2a78d6" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1116.4" cy="289.9" r="3.8" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 3, RRT*: base return 1.508 [1.123, 1.749], n=60</title></circle>
+<line y1="310.1" y2="310.1" x1="1112.7" x2="1120.4" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1116.6" cy="310.1" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 1, A*: base return 1.532 [1.123, 1.928], n=240</title></circle>
+<line y1="321.5" y2="321.5" x1="1097.5" x2="1118.5" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1109.2" cy="321.5" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 1, RRT*: base return 0.764 [-0.455, 1.725], n=60</title></circle>
+<line y1="341.8" y2="341.8" x1="1122.5" x2="1130.0" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1126.4" cy="341.8" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 2, A*: base return 2.553 [2.146, 2.921], n=240</title></circle>
+<line y1="353.2" y2="353.2" x1="1121.5" x2="1130.8" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1126.9" cy="353.2" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 2, RRT*: base return 2.602 [2.038, 3.001], n=60</title></circle>
+<line y1="373.5" y2="373.5" x1="1111.2" x2="1120.8" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1116.3" cy="373.5" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 3, A*: base return 1.501 [0.970, 1.965], n=240</title></circle>
+<line y1="384.9" y2="384.9" x1="1108.4" x2="1122.2" stroke="#eb6834" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1115.9" cy="384.9" r="3.8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 3, RRT*: base return 1.457 [0.682, 2.114], n=60</title></circle>
+<line y1="405.1" y2="405.1" x1="1129.7" x2="1134.4" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1132.3" cy="405.1" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 1, A*: base return 3.166 [2.887, 3.378], n=240</title></circle>
+<line y1="416.5" y2="416.5" x1="1128.4" x2="1132.9" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1130.8" cy="416.5" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 1, RRT*: base return 3.002 [2.757, 3.220], n=60</title></circle>
+<line y1="436.8" y2="436.8" x1="1126.0" x2="1131.9" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1129.2" cy="436.8" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 2, A*: base return 2.838 [2.507, 3.123], n=240</title></circle>
+<line y1="448.2" y2="448.2" x1="1115.9" x2="1130.9" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1124.1" cy="448.2" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 2, RRT*: base return 2.310 [1.459, 3.012], n=60</title></circle>
+<line y1="468.5" y2="468.5" x1="1128.4" x2="1133.4" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1131.2" cy="468.5" r="3.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 3, A*: base return 3.048 [2.758, 3.277], n=240</title></circle>
+<line y1="479.9" y2="479.9" x1="1129.6" x2="1132.7" stroke="#1baf7a" stroke-width="1.5" stroke-linecap="round"></line>
+<circle cx="1131.2" cy="479.9" r="3.8" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 3, RRT*: base return 3.043 [2.882, 3.203], n=60</title></circle>
+</g>
+<text x="24" y="548.0" font-size="10.5" fill="#8a8984">MADQL, the baseline and the reference follower are the Issue #5 records (read only); PPO and the matched baseline are Issue #6. Seeds 10 020–10 099 (A*) and 10 020–10 039 (RRT*); no test seed.</text>
+<text x="24" y="563.0" font-size="10.5" fill="#8a8984">Sources: results/dev5/comparison/records.jsonl, results/dev6/{ppo,baseline_matched}/records.jsonl.</text>
+</svg>

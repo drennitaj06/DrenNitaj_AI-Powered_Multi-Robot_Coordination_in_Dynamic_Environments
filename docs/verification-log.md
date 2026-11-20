@@ -645,3 +645,143 @@ Central, chronological record of **executed** verification: automated test runs,
   - Its per-step conflict rate against the baseline is not clearly different and is confounded by episode length.
   - 0 physical collisions in all training, validation and comparison episodes.
 - **Storage:** results (192 MB of training output, plus the comparison) are local and git-ignored. No checkpoint was committed or placed in `models/` (ADR-9; the final selection for `models/` is Issue #6).
+
+### V-16 — Issue #6 implementation: PPO (MAPPO/IPPO), rollout and GAE, separate trainer, learned-controller modes, matched baseline and block-B study tooling (2026-11-20)
+- **Scope:** the approved Issue #6 design (Revisions 1 and 2, decisions D1–D12). No Git operations were run by Claude; the student performs all Git operations.
+- **Environment:** as V-17 (Windows 11 build 26300, 12 logical CPUs, CPython 3.14.3, NumPy 2.4.6, torch 2.15.0+cpu).
+- **New modules:** `marl/rollout.py`, `marl/ppo.py`, `marl/ppo_trainer.py`, `marl/pilot.py`, `marl/study.py`. Configurations `configs/training/{mappo,ippo,ppo_smoke}.toml` and `mappo_{zeta0,beta0,crr05,crr2}.toml`; each ablation file differs from `mappo.toml` only in its name and the one changed reward weight (checked with `diff`).
+- **Additive changes to Issue #5 modules** (defaults keep the Issue #5 behaviour):
+  - `vector_env`: `with_state=True` returns global states and $\phi(s_T)$ of truncated copies, captured before the auto-reset;
+  - `checkpoint`: the model-version table (`mlp-q-v1`, `mlp-pi-v1`);
+  - `policy`: `LearnedController` runs either network type; explicit `stochastic` mode (PPO sampling, MADQL ε-greedy with ε = 0.05);
+  - `evaluation`: controllers `baseline-noresolver` and `ppo`; allocator, mode and replicate fields; additional per-episode record fields (`undelivered`, `conflicts_per_delivered`, `shaped_return`, `shield_interventions`, `makespan`, timing);
+  - `devcompare`: the matched comparator, the absolute conflict metrics and the algorithm-level bootstrap;
+  - `cli`: `--controller ppo`, `train --resume`, PPO configuration dispatch; a checkpoint of the wrong algorithm exits with code 2.
+- **MADQL regression (frozen):**
+  - `obs-v1`, `reward-v1` and the MADQL trainer are unchanged; the Issue #5 MADQL tests pass unchanged.
+  - `devcompare.analyse` reproduces the stored Issue #5 `analysis.json` exactly (test).
+  - Fresh greedy MADQL episodes reproduce the historical block-B records field by field (V-18, stochastic experiment).
+  - No Issue #5 record, checkpoint or result file was modified: `results/dev5/comparison/records.jsonl` has the same SHA-256 (`53b4e114583b4811…`) before and after Issue #6 (`results/dev5_records_sha_before_issue6.txt`).
+- **Tests added** (all pass): `tests/unit/marl/test_rollout.py`, `test_ppo.py`, `test_ppo_sanity.py`, `test_study.py`; `tests/integration/test_ppo_rollout.py` (R1–R6), `test_ppo_training.py`, `test_ppo_learning_sanity.py` (marked `training`), `test_ppo_pilot.py`, `test_x4_matrix.py` (X-4: all 16 combinations plus 8 shielded variants); `tests/e2e/test_ppo_subprocess.py`; three Issue #6 tests in `tests/unit/marl/test_devcompare.py`.
+- **Quality gates (final run, after all experiments):**
+  - `pytest --cov` (default fast suite): **885 passed, 62 deselected** in 357 s; branch coverage 94 % overall (`marl/rollout.py` 97 %, `ppo.py` 94 %, `ppo_trainer.py` 91 %, `pilot.py` 98 %, `study.py` 84 %).
+  - `pytest -m "slow or e2e or training"`: **62 passed**, 885 deselected, in 279 s (includes the RRT\* X-4 cases, the PPO subprocess e2e test and both `training`-marked learning-sanity tests).
+  - `ruff check src tests`, `ruff format --check src tests` (157 files) and `mypy` (strict, 83 source files): no issues. The formatter was run on an explicit file list that excludes `docs/` (the student's `docs/SESSION_HANDOFF.md`, SHA-256 `ba4a439c…`, is unchanged).
+- **Deviations and fixes found during implementation:**
+  1. **Training seed order wrap-around (deviation from the design).** PPO finishes episodes far faster than MADQL (about 9 400–9 900 episodes per 1 M steps against about 3 470). The first launch of the six runs was stopped by Claude after about 5 minutes (MAPPO at 40 000–50 000 steps, before its first validation; IPPO at 110 000 steps, after the validations at 50 000 and 100 000), because the 10 000 training seeds could have run out and the trainer would then have failed partway through. In the PPO trainer only, the fixed order now restarts from its beginning when exhausted (training block 0–9 999 only; every wrap is logged; `seed_order_passes` in the summary; tested). The aborted directories are kept in `results/training/_aborted_issue6_seedpool/`; none of their output is used for selection or results. They also serve as a reproducibility check: the aborted IPPO validations at 50 000 and 100 000 steps equal those of the final runs, and the step checkpoints there are byte-identical (verified by SHA-256 during the Issue #6 finalisation). **No final run actually wrapped:** the 14 runs used 0.938–0.992 passes.
+  2. Rollout length $T_r$ = 125 instead of the documented 128, so that one iteration (1 000 environment steps) divides the 50 000-step validation interval (approved D4).
+  3. The planned registry name `from_ppo` was not needed; `LearnedController.from_checkpoint` reads the network type from the model-version table.
+  4. `03` §5: the heading "5.7 `experiments`" had been merged into the preceding line by an Issue #5 edit; restored.
+  5. **Conflict-rate denominators differ by source (D10):** evaluation records divide by all robot-steps; the training log divides by non-idle robot-steps. The absolute metrics `conflicts_total` and `conflicts_per_delivered` are therefore reported alongside the rate.
+  6. Summary field `episodes` counts scenarios started, including the 8 in progress at the end of a run; completed episodes are 8 fewer.
+  7. **Procedure note.** One early `ruff format --check docs` run read the student's `docs/SESSION_HANDOFF.md` (check mode only; nothing was written, and its SHA-256 is unchanged). All later format commands use explicit file lists without `docs/`.
+
+### V-17 — Issue #6: RRT\*-in-training feasibility pilot (D7) and the provenance of the earlier RRT\* step cost (2026-11-20)
+- **Scope:** the approved measurement gate before any PPO training. No training run used RRT\*. No Git operations were run by Claude.
+- **Command:** `python -m robocoord.marl.pilot --out results/pilot_rrt --validation-s 2093`, run alone on an otherwise idle machine. Raw output: `results/pilot_rrt/{environment.json, cells.jsonl, projection.json}` and `results/pilot_rrt.log`, local and git-ignored. `cells.jsonl` holds every per-step time.
+- **Environment:**
+  - Windows 11 (build 26300), Intel64 Family 6 Model 186, 12 logical CPUs;
+  - CPython 3.14.3, NumPy 2.4.6, torch 2.15.0+cpu.
+  - `environment.json` was written before the first cell configured torch, so it shows 10 threads and non-deterministic mode. Every cell calls `configure_torch(seed, deterministic=True, threads=1)` before measuring.
+- **Protocol (approved D7):**
+  - the real PPO collection-and-update loop (`marl.rollout` + `marl.ppo`; MAPPO, E = 8, T_r = 125, K = 4 × 4 minibatches, updates on);
+  - 2 000 environment steps per curriculum stage, scenario seeds from the fixed training order (training block only);
+  - RRT\* with $n_{\max}$ = 1 000, and A\* on the same seeds;
+  - two action sources: an untrained seeded actor (run seed 1) and reference-follower actions (the planner's suggestion; updates still run);
+  - 1 h cap per cell; **no cell hit the cap**.
+  - Every planner `plan` call was timed through a wrapper on the planner factory, used only inside the pilot process.
+
+| planner | source | stage | env steps/s | step mean / median / p95 (ms) | planner calls per env step | planner share | update share | episodes finished |
+|---|---|---|---|---|---|---|---|---|
+| A\* | untrained PPO | 1 | 457.9 | 0.66 / 0.57 / 1.20 | 1.50 | 0.030 | 0.170 | 8 |
+| A\* | untrained PPO | 2 | 423.8 | 0.77 / 0.66 / 1.46 | 1.56 | 0.035 | 0.152 | 0 |
+| A\* | untrained PPO | 3 | 258.2 | 1.98 / 1.34 / 6.47 | 3.01 | 0.045 | 0.166 | 0 |
+| A\* | reference | 1 | 484.4 | 0.54 / 0.44 / 1.12 | 0.30 | 0.007 | 0.196 | 26 |
+| A\* | reference | 2 | 527.4 | 0.53 / 0.44 / 1.01 | 0.17 | 0.005 | 0.139 | 15 |
+| A\* | reference | 3 | 333.2 | 1.19 / 0.92 / 2.87 | 0.38 | 0.010 | 0.213 | 4 |
+| RRT\* | untrained PPO | 1 | 9.06 | 108.1 / 89.6 / 242.0 | 1.51 | 0.976 | 0.004 | 8 |
+| RRT\* | untrained PPO | 2 | 7.64 | 127.5 / 103.5 / 360.6 | 1.54 | 0.971 | 0.006 | 0 |
+| RRT\* | untrained PPO | 3 | 7.44 | 130.8 / 113.2 / 284.3 | 3.02 | 0.962 | 0.005 | 0 |
+| RRT\* | reference | 1 | 51.07 | 17.0 / 0.47 / 102.9 | 0.22 | 0.873 | 0.017 | 24 |
+| RRT\* | reference | 2 | 46.63 | 17.7 / 0.69 / 109.1 | 0.21 | 0.850 | 0.018 | 18 |
+| RRT\* | reference | 3 | 56.19 | 14.6 / 1.11 / 71.7 | 0.35 | 0.808 | 0.029 | 1 |
+
+  Peak process memory (RSS) was at most 400 MB in every cell.
+- **Projection:** $T_\text{proj} = \sum_\text{stage}$ share · 10⁶ / throughput $+ T_\text{val}$.
+  - $T_\text{val}$ = 2 093 s: the mean measured validation time of the three Issue #5 MADQL runs (A\* block A every 50 000 steps plus RRT\* monitoring; the same procedure is used for PPO).
+
+  | planner / source | training (h) | total (h) |
+  |---|---|---|
+  | A\* / untrained PPO | 0.86 | 1.44 |
+  | A\* / reference | 0.69 | 1.27 |
+  | RRT\* / untrained PPO | 35.72 | **36.30** |
+  | RRT\* / reference | 5.35 | **5.93** |
+
+  RRT\* takes 41.7× (untrained) and 7.8× (reference) the A\* training time.
+- **Decision under the approved rule:** the untrained-actor projection is above 24 h and the reference projection is below it, so the result is **borderline**.
+  - The evidence is reported to the student, and no RRT\* training run is added without the student's decision.
+  - The approved A\*-only training proceeds, with cross-planner evaluation as for MADQL.
+- **Limitations:**
+  - 2 000 steps per stage cover only 8–34 scenarios.
+  - The untrained actor finished no episode in stages 2 and 3, so resets are under-represented there.
+  - A learning policy moves between the two action sources over training, so the real cost would lie between the projections, with a weighting the pilot cannot predict.
+  - Throughput was measured with one process running. Three or more concurrent runs are slower, as in Issue #5.
+- **Provenance of the earlier RRT\* figure (D12):**
+  - The "about 717 ms per step against 1.9 ms for A\*" quoted in `03` §7 for Issue #5 came from a design-phase scratchpad script (uniform random masked actions, 8 robots, 100 steps, seed 10 000).
+  - Its output was not stored and has no verification-log entry, so it cannot be reproduced from the repository's records.
+  - It used a different configuration from this pilot (one environment, 32×32 maps, random actions instead of the PPO loop over the curriculum), so the numbers are not comparable.
+  - This pilot replaces it as the recorded evidence for the Issue #6 decision. The `03` §7 sentence is kept as the historical reason for Issue #5's A\*-only training and now points here.
+
+### V-18 — Issue #6 results: PPO training (E4, PPO part), Option C reward ablation and the block-B development experiments (2026-11-20)
+- **Training runs** (A\* only, as decided after V-17):
+  - `python -m robocoord train --config configs/training/<cfg>.toml --seed <s> --out results/training/<cfg>_seed<s>` for `mappo` and `ippo` × seeds 1–3 (six concurrent runs), then the four Option C cells × seeds 1–2 (eight concurrent runs, alongside the block-B evaluations).
+  - All 14 runs reached 1 000 000 environment steps (1 000 iterations). No log contains a traceback; no run was resumed; no run wrapped the training seed order (0.938–0.992 passes).
+  - 0 physical collisions in every training, validation and RRT\* monitoring episode.
+- **Selection verified by recomputation:** for every run, the lexicographic maximum over the A\* records of `validation.jsonl` equals the step in `best.json`; the SHA-256 of `best.pt` matches its sidecar; its tensors equal those of the selected step checkpoint.
+
+  | run | selected step | `best.pt` SHA-256 | config hash |
+  |---|---|---|---|
+  | MAPPO 1 | 200 000 | `e0979974682ec0709f62c31513cc6baf7dff7e171d697a21f9aa011b1b382f2b` | `ff0390663415d758` |
+  | MAPPO 2 | 300 000 | `9ebc8afd047188f023a287056580d75697b1ac6a85f76b4a0b32739fe65ea810` | `769a47efaa198388` |
+  | MAPPO 3 | 150 000 | `a0af8b8ac00ccf1a32e8672d60b8078b526d89fd283cc29ac95c120baf82de6d` | `811372818b356fe3` |
+  | IPPO 1 | 550 000 | `3706f6c6895c289f336de47b4e955cd5eb985216a9f27e5fec605c718ee8d896` | `6f44e5a66efbf817` |
+  | IPPO 2 | 250 000 | `47d849e4262d861493bc0ae19c32fb77afe6fef4bd4576fbb2ce53762390de08` | `0010f38af22fd0ac` |
+  | IPPO 3 | 500 000 | `d350e4170d05aca6ea592f56cc0846591db8e909c4b3350305aac258d7b81c6d` | `6df5586db1fc2a91` |
+
+  The eight ablation checkpoints (`results/training/mappo_{zeta0,beta0,crr05,crr2}_seed{1,2}/best.pt`) were verified the same way; their hashes are in `results/dev6/ablation/manifest.json`.
+- **Seed hygiene (from the stored records):** training episodes used seeds 0–9 999; validation 10 000–10 019; every Issue #6 block-B record (15 360 episodes) lies in 10 020–10 099. No seed in 20 000–20 999 appears in any record.
+- **Block-B experiments** (`python -m robocoord.marl.study <experiment> …`, each run once, after selection):
+
+  | experiment | episodes | output |
+  |---|---|---|
+  | `matched-baseline` | 300 | `results/dev6/baseline_matched/` |
+  | `ppo` (6 policies) | 1 800 | `results/dev6/ppo/` |
+  | `ablation` (8 policies, A\* only) | 1 920 | `results/dev6/ablation/` |
+  | `shield` (9 policies, full level) | 2 700 | `results/dev6/shield/` |
+  | `stochastic` (9 policies, A\*; greedy + 3 replicates) | 8 640 | `results/dev6/stochastic/` |
+
+  - All processes exited with code 0. 0 physical collisions in all 15 360 episodes.
+  - **Determinism check:** the 720 fresh greedy MADQL episodes of the stochastic experiment equal the historical Issue #5 records in every stored field except `wall_s` (`results/dev6/stochastic/determinism_check.json`: 720 compared, 0 mismatches).
+  - **Historical records untouched:** `results/dev5/comparison/records.jsonl` has SHA-256 `53b4e114583b4811aeba21e0deddb3210a79400b8c481f3dd088fd2841318e4b` before Issue #6 (`results/dev5_records_sha_before_issue6.txt`) and after all Issue #6 experiments.
+- **Analysis:** `python -m robocoord.marl.study analyse --root results/dev6` (82 s) wrote `analysis.json` and `summary.md`. A first run labelled the Issue #5 MADQL records in the shield summaries with an empty allocator (`madql-seed1//off`), because those records predate the allocator and shield fields. The paired comparisons were already correct (they default to auction / off). The grouping was fixed in `marl/study.py`, a regression test added (`test_shield_analysis_labels_historical_records_as_auction_off`), and the analysis re-run; no record changed.
+- **Results** (details in `05` §B.6: E4 PPO part, the reward ablation and the Issue #6 development comparison):
+  - block-B completion: PPO 0.982–0.992 (A\*) and 0.983–0.995 (RRT\*); MADQL − PPO about −0.40 (A\*) and −0.30 (RRT\*);
+  - PPO against the matched baseline: no detectable completion difference on A\*, slightly lower on RRT\*; against the original baseline (resolver on): −0.009 to −0.019 (A\*);
+  - PPO proposes more conflicts than both baselines; MAPPO's two earliest selected checkpoints account for most of it (robot–obstacle conflicts), which the predictive shield removes;
+  - the Option C ablation shows no completion effect; its return and conflict differences are confounded with the selected training step;
+  - stochastic execution raises completion for every policy (PPO to 0.999; MADQL to 0.888–0.918).
+- **Storage:** 1.5 GB of training output for the 14 runs, plus 15 MB in `results/dev6/` and 213 KB in `results/pilot_rrt/`; all local and git-ignored. No checkpoint was placed in `models/` or committed; the candidate files are proposed to the student for approval (ADR-9).
+
+### V-19 — Issue #6 finalisation: completeness, integrity and documentation cross-check (2026-11-20)
+- **Scope:** the student's Issue #6 finalisation request, on branch `feature/marl-ppo` (read from `.git/HEAD`; no Git command was run). Nothing was trained or evaluated for this entry.
+- **Final quality gates** (no source change since; `-W default` shows warnings the default configuration hides):
+  - `pytest --cov -W default` (fast suite): **885 passed, 62 deselected, 2 warnings**, 487 s; 94 % branch coverage.
+  - `pytest -m "slow or e2e or training" -W default -rA`: **62 passed, 885 deselected, 0 warnings**, 409 s.
+  - `ruff check src tests`, `ruff format --check src tests` and `mypy` (strict, 83 files): no issues.
+  - **Open item (minor, not fixed):** the 2 warnings are `ResourceWarning`s from `test_resume_at_an_iteration_boundary`. `PPOTrainer.train` closes `train_log.jsonl` and `validation.jsonl` only on normal completion, so an exception leaves the handles to garbage collection. Every record is flushed when written, so no data can be lost. A `try`/`finally` in `train` would close them; the frozen MADQL trainer has the same pattern.
+- **Experiments complete:** 14 training runs × 1 000 000 steps (6 main, 8 ablation; 20 validations each, no resume, no `pre_resume` files); block-B experiments with the expected record counts and unique keys (matched baseline 300, PPO 1 800, ablation 1 920, shield 2 700, stochastic 8 640), all seeds in 10 020–10 099.
+- **No output overwritten:** each `results/dev6/<experiment>` directory was written once (manifest before records); only the derived `analysis.json` / `summary.md` were regenerated (V-18). Every file under `results/dev5/` and `results/training/madql_seed{1,2,3}/` was last written on 2026-11-19; the historical records keep SHA-256 `53b4e114…`, and the three MADQL `best.pt` hashes equal V-15.
+- **Checkpoints:** the nine candidate `best.pt` files (MADQL, MAPPO and IPPO × run seeds 1–3) are 636 401 bytes each, contain only the six network tensors, match their sidecar SHA-256, and their sidecars contain every ADR-9 field (`mlp-q-v1` for MADQL, `mlp-pi-v1` for PPO). Renamed copies load through `LearnedController.from_checkpoint`.
+- **Aborted runs as a reproducibility check:** the aborted IPPO runs of the first launch (V-16, deviation 1) reached 110 000 steps; their validations at 50 000 and 100 000 equal those of the final runs, and the step checkpoints are byte-identical.
+- **Documentation cross-checked against the records** (scripted): 43 of the 46 algorithm-level rows of `analysis.json` that `05` reports appear verbatim (the other 3 are conflict rows against the original baseline, not tabulated by design); the pooled block-B table, the ablation table, the pilot projection and the parameter counts of `04` were recomputed. **Corrected:** two last-digit roundings in the ablation table (β = 0 return +1.27, not +1.28; $c_{\text{rr}}$ = 0.5 lower bound 0.46, not 0.47), IPPO 2's block-B A\* completion (0.989, not 0.990), and V-16's description of the aborted launch (IPPO had validated twice).
+- **Deviations from the approved design**, all documented: the training seed-order wrap-around (V-16, `03` §7; never triggered); $T_r$ = 125 (D4); the unused registry name `from_ppo`; the stochastic diagnostic on block B A\* only (as approved in Revision 2); summary `episodes` counting started scenarios.

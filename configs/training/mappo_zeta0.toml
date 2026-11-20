@@ -1,0 +1,71 @@
+# MAPPO reward-ablation cell: no potential-based shaping, zeta = 0 (Issue #6, Option C, approved D3). The main MAPPO
+# configuration with only this reward weight changed (c_ro stays 1). Validation, checkpoint
+# selection and every evaluation use the default reward weights. Run seeds 1 and 2.
+# Run: python -m robocoord train --config configs/training/mappo_zeta0.toml --seed 1 --out results/training/mappo_zeta0_seed1
+# Training root seeds are 1, 2 and 3. The comparison with MADQL (Issue #5) shares everything that
+# defines it: the environment composition (A*, auction, endpoint recovery on, resolver off, shield
+# off), observation obs-v1 and reward reward-v1 with the default weights, the curriculum and the
+# scenario order (sampler_seed = 0), the budget of 1 000 000 environment steps (one step = one
+# joint step of one copy), block-A validation every 50 000 steps and the selection rule.
+# One iteration collects n_envs * rollout = 8 * 125 = 1 000 environment steps.
+
+[run]
+name = "mappo_zeta0"
+run_seed = 1
+total_steps = 1000000
+sampler_seed = 0
+log_interval = 10000
+deterministic = true
+threads = 1
+
+[ppo]
+variant = "mappo"
+n_envs = 8
+rollout = 125
+epochs = 4
+minibatches = 4
+lr = 3e-4
+adam_eps = 1e-5
+gamma = 0.99
+lam = 0.95
+clip = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+target_kl = 0.02
+actor_grad_clip = 0.5
+critic_grad_clip = 0.5
+hidden = [256, 256]
+critic_hidden = [256, 256]
+global_blocks = 8
+max_robots = 8
+
+[env]
+planner = "astar"
+allocator = "auction"
+endpoint = true
+deadlock = false
+shield = "off"
+global_blocks = 8
+
+[obs]
+radius = 3
+path_cells = 6
+max_priority = 3
+
+[reward]
+c_step = 0.01
+zeta = 0.0
+r_pick = 0.5
+r_del = 1.0
+c_rr = 1.0
+c_ro = 1.0
+c_sh = 0.5
+beta = 0.3
+gamma = 0.99
+
+[validation]
+interval = 50000
+rrt_interval = 250000
+rrt = true
+workers = 3
+seeds_per_level = 20

@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 498" width="1180" height="498" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Fig. 13 — Selection on block A, evaluation on block B, and difficulty levels (A*)">
+<title>Fig. 13 — Selection on block A, evaluation on block B, and difficulty levels (A*)</title>
+<rect width="1180" height="498" fill="#fcfcfb"/>
+<text x="24" y="30" font-size="16" font-weight="650" fill="#0b0b0b">Fig. 13 — Selection on block A, evaluation on block B, and difficulty levels (A*)</text>
+<text x="24" y="50" font-size="11.5" fill="#52514e">(a) block-A score of the selected checkpoint against block B (disjoint seeds); (b) block-B completion per dynamics level</text>
+<circle cx="30.0" cy="68.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="40.0" y="72.0" font-size="11.5" fill="#0b0b0b">MADQL</text>
+<circle cx="104.0" cy="68.0" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="114.0" y="72.0" font-size="11.5" fill="#0b0b0b">MAPPO</text>
+<circle cx="178.0" cy="68.0" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="188.0" y="72.0" font-size="11.5" fill="#0b0b0b">IPPO</text>
+<rect x="241.0" y="64.2" width="7.6" height="7.6" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="254.8" y="72.0" font-size="11.5" fill="#0b0b0b">non-learned</text>
+<clipPath id="c1839948624208"><rect x="72" y="112" width="316" height="306"/></clipPath>
+<line x1="80" x2="380" y1="410.0" y2="410.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="413.8" text-anchor="end" font-size="10.5" fill="#52514e">0.5</text>
+<line x1="80" x2="380" y1="352.0" y2="352.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="355.8" text-anchor="end" font-size="10.5" fill="#52514e">0.6</text>
+<line x1="80" x2="380" y1="294.0" y2="294.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="297.8" text-anchor="end" font-size="10.5" fill="#52514e">0.7</text>
+<line x1="80" x2="380" y1="236.0" y2="236.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="239.8" text-anchor="end" font-size="10.5" fill="#52514e">0.8</text>
+<line x1="80" x2="380" y1="178.0" y2="178.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="181.8" text-anchor="end" font-size="10.5" fill="#52514e">0.9</text>
+<line x1="80" x2="380" y1="120.0" y2="120.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="73" y="123.8" text-anchor="end" font-size="10.5" fill="#52514e">1</text>
+<line x1="80.0" x2="80.0" y1="120" y2="410" stroke="#e6e5e1" stroke-width="1"/>
+<text x="80.0" y="425.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.5</text>
+<line x1="140.0" x2="140.0" y1="120" y2="410" stroke="#e6e5e1" stroke-width="1"/>
+<text x="140.0" y="425.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.6</text>
+<line x1="200.0" x2="200.0" y1="120" y2="410" stroke="#e6e5e1" stroke-width="1"/>
+<text x="200.0" y="425.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.7</text>
+<line x1="260.0" x2="260.0" y1="120" y2="410" stroke="#e6e5e1" stroke-width="1"/>
+<text x="260.0" y="425.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.8</text>
+<line x1="320.0" x2="320.0" y1="120" y2="410" stroke="#e6e5e1" stroke-width="1"/>
+<text x="320.0" y="425.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.9</text>
+<line x1="380.0" x2="380.0" y1="120" y2="410" stroke="#e6e5e1" stroke-width="1"/>
+<text x="380.0" y="425.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="80" x2="380" y1="410" y2="410" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="80" x2="80" y1="120" y2="410" stroke="#b9b8b2" stroke-width="1"/>
+<text x="80" y="108" font-size="12.5" font-weight="600" fill="#0b0b0b">(a) Block A (selection) vs block B</text>
+<text x="230.0" y="444.0" text-anchor="middle" font-size="11" fill="#52514e">block-A completion at the selected step</text>
+<text x="34.0" y="265.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 34.0 265.0)">block-B completion</text>
+<g clip-path="url(#c1839948624208)">
+<polyline points="80.0,410.0 380.0,120.0" fill="none" stroke="#b9b8b2" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="4 3"></polyline>
+<text x="117.0" y="396.6" text-anchor="start" font-size="10.5" fill="#52514e" font-weight="normal">y = x</text>
+<line x1="209.1" x2="209.1" y1="335.4" y2="298.7" stroke="#2a78d6" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="209.1" cy="316.9" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 1: block A 0.715 → block B 0.661 [0.629, 0.692]</title></circle>
+<line x1="161.1" x2="161.1" y1="378.4" y2="345.3" stroke="#2a78d6" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="161.1" cy="361.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 2: block A 0.635 → block B 0.584 [0.554, 0.612]</title></circle>
+<line x1="158.6" x2="158.6" y1="383.4" y2="349.7" stroke="#2a78d6" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="158.6" cy="366.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 3: block A 0.631 → block B 0.575 [0.546, 0.604]</title></circle>
+<line x1="378.0" x2="378.0" y1="129.7" y2="124.6" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="378.0" cy="127.0" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 1: block A 0.997 → block B 0.988 [0.983, 0.992]</title></circle>
+<line x1="377.4" x2="377.4" y1="129.4" y2="124.4" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="377.4" cy="126.8" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 2: block A 0.996 → block B 0.988 [0.984, 0.992]</title></circle>
+<line x1="375.4" x2="375.4" y1="129.8" y2="124.7" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="375.4" cy="127.1" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 3: block A 0.992 → block B 0.988 [0.983, 0.992]</title></circle>
+<line x1="375.9" x2="375.9" y1="132.9" y2="127.7" stroke="#1baf7a" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="375.9" cy="130.2" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 1: block A 0.993 → block B 0.982 [0.978, 0.987]</title></circle>
+<line x1="375.4" x2="375.4" y1="128.3" y2="124.2" stroke="#1baf7a" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="375.4" cy="126.1" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 2: block A 0.992 → block B 0.989 [0.986, 0.993]</title></circle>
+<line x1="375.9" x2="375.9" y1="126.9" y2="123.0" stroke="#1baf7a" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="375.9" cy="124.9" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 3: block A 0.993 → block B 0.992 [0.988, 0.995]</title></circle>
+</g>
+<clipPath id="c1839948621296"><rect x="482" y="112" width="676" height="306"/></clipPath>
+<line x1="490" x2="1150" y1="352.8" y2="352.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="483" y="356.6" text-anchor="end" font-size="10.5" fill="#52514e">0.4</text>
+<line x1="490" x2="1150" y1="276.4" y2="276.4" stroke="#e6e5e1" stroke-width="1"/>
+<text x="483" y="280.2" text-anchor="end" font-size="10.5" fill="#52514e">0.6</text>
+<line x1="490" x2="1150" y1="200.1" y2="200.1" stroke="#e6e5e1" stroke-width="1"/>
+<text x="483" y="203.9" text-anchor="end" font-size="10.5" fill="#52514e">0.8</text>
+<line x1="490" x2="1150" y1="123.8" y2="123.8" stroke="#e6e5e1" stroke-width="1"/>
+<text x="483" y="127.6" text-anchor="end" font-size="10.5" fill="#52514e">1</text>
+<text x="600.0" y="426.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">static</text>
+<text x="820.0" y="426.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">obstacles</text>
+<text x="1040.0" y="426.0" text-anchor="middle" font-size="10.5" fill="#0b0b0b">full</text>
+<line x1="490" x2="1150" y1="410" y2="410" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="490" x2="490" y1="120" y2="410" stroke="#b9b8b2" stroke-width="1"/>
+<text x="490" y="108" font-size="12.5" font-weight="600" fill="#0b0b0b">(b) Block-B completion by level</text>
+<text x="444.0" y="265.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 444.0 265.0)">delivered ÷ released</text>
+<g clip-path="url(#c1839948621296)">
+<line x1="528.5" x2="528.5" y1="123.8" y2="123.8" stroke="#3d3c39" stroke-width="1.4" stroke-linecap="round"></line>
+<rect x="525.1" y="120.4" width="6.8" height="6.8" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on), static: 1.000 [1.000, 1.000]</title></rect>
+<line x1="748.5" x2="748.5" y1="124.7" y2="123.8" stroke="#3d3c39" stroke-width="1.4" stroke-linecap="round"></line>
+<rect x="745.1" y="120.7" width="6.8" height="6.8" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on), obstacles: 0.999 [0.998, 1.000]</title></rect>
+<line x1="968.5" x2="968.5" y1="124.9" y2="123.8" stroke="#3d3c39" stroke-width="1.4" stroke-linecap="round"></line>
+<rect x="965.1" y="120.8" width="6.8" height="6.8" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on), full: 0.999 [0.997, 1.000]</title></rect>
+<line x1="557.1" x2="557.1" y1="142.6" y2="131.0" stroke="#3d3c39" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="557.1,130.9 562.5,136.3 557.1,141.7 551.7,136.3" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off), static: 0.967 [0.951, 0.981]</title></polygon>
+<line x1="777.1" x2="777.1" y1="128.9" y2="123.8" stroke="#3d3c39" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="777.1,120.2 782.5,125.6 777.1,131.0 771.7,125.6" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off), obstacles: 0.995 [0.987, 1.000]</title></polygon>
+<line x1="997.1" x2="997.1" y1="130.5" y2="124.9" stroke="#3d3c39" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="997.1,121.9 1002.5,127.3 997.1,132.7 991.7,127.3" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off), full: 0.991 [0.982, 0.997]</title></polygon>
+<line x1="585.7" x2="585.7" y1="184.9" y2="165.6" stroke="#77766f" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="585.7,169.5 591.3,179.6 580.1,179.6" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower, static: 0.866 [0.840, 0.891]</title></polygon>
+<line x1="805.7" x2="805.7" y1="157.5" y2="142.3" stroke="#77766f" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="805.7,143.9 811.3,153.9 800.1,153.9" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower, obstacles: 0.933 [0.912, 0.952]</title></polygon>
+<line x1="1025.7" x2="1025.7" y1="160.8" y2="145.3" stroke="#77766f" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="1025.7,146.8 1031.3,156.9 1020.1,156.9" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower, full: 0.925 [0.903, 0.944]</title></polygon>
+<line x1="614.3" x2="614.3" y1="388.5" y2="376.6" stroke="#2a78d6" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="614.3" cy="380.8" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL, static: seeds 0.338, 0.336, 0.306</title></circle>
+<line x1="834.3" x2="834.3" y1="227.9" y2="197.4" stroke="#2a78d6" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="834.3" cy="215.2" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL, obstacles: seeds 0.807, 0.727, 0.747</title></circle>
+<line x1="1054.3" x2="1054.3" y1="263.5" y2="212.2" stroke="#2a78d6" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="1054.3" cy="244.7" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL, full: seeds 0.768, 0.647, 0.634</title></circle>
+<line x1="642.9" x2="642.9" y1="132.2" y2="131.0" stroke="#eb6834" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="642.9" cy="131.7" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO, static: seeds 0.981, 0.979, 0.978</title></circle>
+<line x1="862.9" x2="862.9" y1="128.6" y2="126.2" stroke="#eb6834" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="862.9" cy="127.3" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO, obstacles: seeds 0.994, 0.991, 0.988</title></circle>
+<line x1="1082.9" x2="1082.9" y1="128.2" y2="126.2" stroke="#eb6834" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="1082.9" cy="127.1" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO, full: seeds 0.989, 0.992, 0.994</title></circle>
+<line x1="671.5" x2="671.5" y1="136.6" y2="129.8" stroke="#1baf7a" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="671.5" cy="132.7" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO, static: seeds 0.966, 0.984, 0.980</title></circle>
+<line x1="891.5" x2="891.5" y1="128.9" y2="125.0" stroke="#1baf7a" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="891.5" cy="127.4" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO, obstacles: seeds 0.987, 0.988, 0.997</title></circle>
+<line x1="1111.5" x2="1111.5" y1="127.8" y2="125.5" stroke="#1baf7a" stroke-width="1.6" stroke-linecap="round"></line>
+<circle cx="1111.5" cy="126.5" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO, full: seeds 0.990, 0.993, 0.996</title></circle>
+</g>
+<text x="24" y="468.0" font-size="10.5" fill="#8a8984">(b) learned: mean of 3 policies, bar = seed range; non-learned: pooled, bar = 95 % CI. Square = baseline (resolver on); diamond = matched baseline (resolver off); triangle = reference follower.</text>
+<text x="24" y="483.0" font-size="10.5" fill="#8a8984">Sources: validation.jsonl + best.json of each run; block-B sources as in Fig. 7.</text>
+</svg>

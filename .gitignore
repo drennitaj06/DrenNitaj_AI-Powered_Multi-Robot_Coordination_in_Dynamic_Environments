@@ -23,7 +23,17 @@ htmlcov/
 # --- Project data and generated artefacts (see docs/03-architecture.md ADR-9) ---
 data/raw/
 data/processed/
-results/
+results/*
+# Exception: the curated post-Issue-6 overview figures (tools/figures/overview.py).
+# Only these four file types are tracked; everything else under results/ stays ignored.
+!results/figures/
+results/figures/*
+!results/figures/overview/
+results/figures/overview/*
+!results/figures/overview/*.svg
+!results/figures/overview/*.csv
+!results/figures/overview/SOURCES.md
+!results/figures/overview/index.html
 
 # --- Credentials (never commit) ---
 kaggle.json
