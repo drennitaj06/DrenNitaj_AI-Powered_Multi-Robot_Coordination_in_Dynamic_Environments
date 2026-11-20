@@ -1,0 +1,23 @@
+# Tiny PPO configuration for the end-to-end `train` smoke test and quick checks (Issue #6).
+# Not a result configuration.
+
+[run]
+name = "ppo-smoke"
+run_seed = 1
+total_steps = 200
+log_interval = 100
+
+[ppo]
+variant = "mappo"
+n_envs = 2
+rollout = 50
+minibatches = 2
+hidden = [32, 32]
+critic_hidden = [32, 32]
+
+[validation]
+interval = 0
+rrt_interval = 0
+rrt = false
+workers = 1
+seeds_per_level = 1
