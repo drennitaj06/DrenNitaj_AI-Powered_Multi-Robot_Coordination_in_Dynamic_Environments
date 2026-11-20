@@ -1053,6 +1053,57 @@ $$
 5. The MAPPO/IPPO switch changes only the critic input.
 6. Short end-to-end improvement check, as for MADQL.
 
+**Implementation notes (Issue #6).**
+- **Modules:**
+  - `marl/rollout.py` (NumPy only): padded `[T_r, E, N_max]` buffer, GAE and the collection loop;
+  - `marl/ppo.py`: actor, critic, masked categorical, loss and update;
+  - `marl/ppo_trainer.py`: a separate trainer; the MADQL trainer is unchanged (D9);
+  - `configs/training/{mappo,ippo,ppo_smoke}.toml` and the reward-ablation configurations `mappo_{zeta0,beta0,crr05,crr2}.toml`.
+- **Actor:**
+  - $356 \to 256 \to 256 \to 5$ (158 469 parameters), shared by all robots, with no robot identity;
+  - orthogonal initialisation (hidden gain √2, output gain 0.01);
+  - masked actions get the logit `finfo.min`; the entropy is summed over allowed actions only;
+  - actions are sampled by inverse CDF from the float64 masked softmax with the run's `sample` stream; the stored log-probability is computed by the same function the update uses.
+- **Critic:**
+  - shared by all robots (orthogonal, output gain 1);
+  - MAPPO: $[o_i, \phi(s)]$, 615 inputs, 223 745 parameters; $\phi(s)$ includes $t/T$;
+  - IPPO: $o_i$, 356 inputs, 157 441 parameters;
+  - the switch changes only the critic input and width; with the same seed both variants initialise identical actors (tested).
+- **Rollout:** $E = 8$, $T_r = 125$, so 1 000 environment steps per iteration (D4; the documented 128 would not divide the 50 000-step validation interval). Robot slots beyond a copy's team size are invalid and excluded from every loss.
+- **GAE** per (copy, slot) stream with $\gamma = 0.99$, $\lambda = 0.95$:
+  - $V_\text{next} = 0$ after termination;
+  - $V_\text{next} = V(\text{final observation}, \phi(s_T))$ after truncation, captured before the auto-reset (`SyncVectorEnv(with_state=True)`; tests R1–R6);
+  - otherwise the next value of the same stream;
+  - the recursion stops at termination **and** truncation, so it never crosses an auto-reset.
+- **Update:**
+  - $K = 4$ epochs × 4 shuffled minibatches;
+  - advantages normalised per minibatch;
+  - $\epsilon_c = 0.2$, $c_v = 0.5$ (MSE, no value clipping), $c_e = 0.01$;
+  - Adam with lr 3e-4 and eps 1e-5 (one optimiser, actor and critic parameter groups);
+  - gradient norms clipped to 0.5 **separately** for actor and critic (D5), so a critic loss of any scale leaves the actor's update unchanged (tested);
+  - the iteration stops early once a minibatch's approximate KL $\mathbb{E}[(\rho - 1) - \log\rho]$ exceeds 0.02;
+  - no learning-rate annealing.
+- **Determinism:**
+  - streams `sample`, `shuffle` and `torch` come from `SeedSequence(run_seed)`;
+  - the scenario order is the fixed training order (sampler seed 0), as for MADQL;
+  - deterministic torch with one thread;
+  - the same configuration and seed give byte-identical checkpoints and logs, timings excepted (tested).
+- **Checkpoints:**
+  - inference export is the actor only, model specification `mlp-pi-v1`, next to `mlp-q-v1` in an additive version table;
+  - the sidecar adds the variant, `evaluation_mode = greedy` and the critic specification (`included: false`);
+  - training checkpoints `*.train.pt` hold actor, critic, optimiser, iteration, environment and robot steps, the scenario position, the NumPy and torch random states and the best selection so far.
+- **Resume (D8):** at the latest validation point only. The episodes in progress there are discarded and restart from the next scenario seeds of the fixed order, so a resumed run is **not bitwise identical** to an uninterrupted one. The interrupted attempt's later log records are moved to `*.pre_resume_<n>.jsonl`, and the resume is recorded in the log and the summary (tested).
+- **Learned controller:** the PPO actor runs through the existing `LearnedController` (masked arg-max = the policy's mode). Stochastic execution is an explicit evaluation mode, never the default: PPO samples from the masked policy, MADQL uses masked ε-greedy with ε = 0.05.
+- **Tests:**
+  - `tests/unit/marl/test_rollout.py` (test 1);
+  - `test_ppo.py` (tests 2, 3, 5, separate clipping, determinism);
+  - `test_ppo_sanity.py` (test 4: a masked bandit and the chain MDP, both variants);
+  - `tests/integration/test_ppo_rollout.py` (R1–R6);
+  - `test_ppo_training.py` (X-7, reproducibility, resume, CLI);
+  - `test_ppo_learning_sanity.py` (test 6, marked `training`);
+  - `tests/e2e/test_ppo_subprocess.py`;
+  - `tests/integration/test_x4_matrix.py` (X-4).
+
 ---
 
 ## 8. Observations and rewards

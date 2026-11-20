@@ -291,10 +291,28 @@ The MAPPO critic receives $s_i^c = [o_i,\, \phi(s_t)]$, where $\phi$ is a fixed-
 
 Size $4G^2 + 3$. IPPO uses $s_i^c = o_i$.
 
+*Implemented in Issue #6:* the MAPPO critic input has $356 + 259 = 615$ entries for $G = 8$. Only $\phi$ carries the time $t / T_{\max}$, so the IPPO critic cannot see the remaining horizon. One critic is shared by all robots; the robot enters only through $o_i$.
+
 ### 6.3 Episode end
 
 - **Termination:** every released task is delivered and no future releases are scheduled. In this state all robots are idle.
 - **Truncation:** $t = T_{\max}$. Truncation is a time limit, *not* a terminal state of the process. Value targets bootstrap from the value of the final state (`04-algorithms.md` §6–7).
+
+*Issue #6 (PPO):*
+- The truncation bootstrap is $V(o_i(s_T), \phi(s_T))$ for MAPPO and $V(o_i(s_T))$ for IPPO. $s_T$ is the look-ahead state at the horizon, captured before the vector environment resets the episode.
+- After termination the bootstrap is 0.
+- Advantage recursions stop at both ends, so they never cross into the next episode.
+
+### 6.4 Learned policies (Issue #6 note)
+
+- **MADQL** acts greedily on $Q_\theta(o_i, \cdot)$ over the allowed actions $m_i$ (Issue #5).
+- **PPO's shared actor** defines the masked categorical policy
+  $$
+  \pi_\phi(a \mid o_i) = \frac{\mathbb{1}[a \in m_i]\, e^{\ell_a(o_i)}}{\sum_{b \in m_i} e^{\ell_b(o_i)}},
+  $$
+  with logits $\ell(o_i) \in \mathbb{R}^5$. Stay is never masked, so $m_i \neq \emptyset$.
+- **Execution modes.** The main evaluations execute the mode $\arg\max_{a \in m_i} \ell_a$, the *greedy* mode with ties broken to the lowest index. The Issue #6 stochastic diagnostic samples $a \sim \pi_\phi(\cdot \mid o_i)$ for PPO, and uses masked ε-greedy with ε = 0.05 for MADQL.
+- **No identity input.** Neither policy receives a robot identity. Symmetric situations are therefore broken only by the observations, by the arbiter's fixed robot order, or by sampling in the stochastic mode.
 
 ---
 
