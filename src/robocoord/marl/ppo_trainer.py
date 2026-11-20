@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import time
 import tomllib
 from collections.abc import Sequence
@@ -135,11 +136,15 @@ def load_ppo_config(path: str | Path, **overrides: Any) -> PPOTrainingConfig:
 
 
 def peak_rss_mb() -> float | None:
-    """Peak resident memory of this process in MB (validation workers are separate processes)."""
-    try:
-        import os
+    """Peak resident memory of this process in MB (validation workers are separate processes).
 
-        if os.name == "nt":
+    Windows: ``GetProcessMemoryInfo`` (peak working set); elsewhere ``getrusage``. The branch is
+    selected with ``sys.platform`` (not ``os.name``) because type checkers understand that check:
+    each branch is checked only against its own platform's stubs (``ctypes.WinDLL`` exists only
+    in the Windows stubs, ``resource`` only in the POSIX ones).
+    """
+    try:
+        if sys.platform == "win32":
             import ctypes
             from ctypes import wintypes
 
@@ -166,13 +171,11 @@ def peak_rss_mb() -> float | None:
             if not psapi.GetProcessMemoryInfo(kernel32.GetCurrentProcess(), ctypes.byref(c), c.cb):
                 return None
             return float(c.PeakWorkingSetSize) / 2**20
-        import resource
+        else:
+            import resource
 
-        # the Windows stubs of ``resource`` lack these names; this branch never runs there
-        kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # type: ignore[attr-defined,unused-ignore]
-        import sys
-
-        return float(kb) / (2**20 if sys.platform == "darwin" else 2**10)
+            kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # KiB; bytes on macOS
+            return float(kb) / (2**20 if sys.platform == "darwin" else 2**10)
     except Exception:  # pragma: no cover - platform specific
         return None
 
