@@ -1,0 +1,17 @@
+quantity,planner,K,value,low,high,n
+latency_ms,astar,0,0.235225,0.2218,0.2439,80
+latency_ms,astar,4,0.223825,0.21895,0.24055,80
+latency_ms,astar,8,0.23735,0.232195,0.246818,80
+latency_ms,astar,16,0.2326,0.2274,0.2379,80
+latency_ms,rrtstar,0,145.327,142.952,147.077,80
+latency_ms,rrtstar,4,149.233,143.857,153.24,80
+latency_ms,rrtstar,8,172.505,165.811,180.008,80
+latency_ms,rrtstar,16,124.567,119.923,144.325,80
+completion_team4,astar,0,0.69375,0.622917,0.76875,40
+completion_team4,astar,4,0.70625,0.641667,0.770833,40
+completion_team4,astar,8,0.783333,0.71875,0.845833,40
+completion_team4,astar,16,0.8625,0.802031,0.914583,40
+completion_team4,rrtstar,0,0.779167,0.716667,0.839583,40
+completion_team4,rrtstar,4,0.841667,0.777031,0.897917,40
+completion_team4,rrtstar,8,0.727083,0.652031,0.802083,40
+completion_team4,rrtstar,16,0.783333,0.722917,0.839583,40

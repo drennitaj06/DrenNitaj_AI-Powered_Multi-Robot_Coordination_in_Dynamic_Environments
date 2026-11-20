@@ -1,4 +1,4 @@
-# Post-Issue-6 research analysis and improvement roadmap (2026-11-20)
+# Post-Issue-6 research analysis and improvement roadmap (2026-11-20) 
 
 **Status:** analysis and proposal only. Nothing in this document has been implemented, trained or
 evaluated beyond the stored Issue #1–#6 records. Every number is computed from those records; the

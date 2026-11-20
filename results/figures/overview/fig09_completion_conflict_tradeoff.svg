@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 503" width="1180" height="503" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Fig. 9 — Completion against conflicts (block B, A*)">
+<title>Fig. 9 — Completion against conflicts (block B, A*)</title>
+<rect width="1180" height="503" fill="#fcfcfb"/>
+<text x="24" y="30" font-size="16" font-weight="650" fill="#0b0b0b">Fig. 9 — Completion against conflicts (block B, A*)</text>
+<text x="24" y="50" font-size="11.5" fill="#52514e">Each point is one controller; filled = greedy (primary), hollow = stochastic execution (3 replicates, same instances); crosshairs = 95 % bootstrap CI. Panel (b) enlarges the top of</text>
+<text x="24" y="65" font-size="11.5" fill="#52514e">panel (a)</text>
+<circle cx="30.0" cy="83.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="40.0" y="87.0" font-size="11.5" fill="#0b0b0b">MADQL</text>
+<circle cx="104.0" cy="83.0" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="114.0" y="87.0" font-size="11.5" fill="#0b0b0b">MAPPO</text>
+<circle cx="178.0" cy="83.0" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="188.0" y="87.0" font-size="11.5" fill="#0b0b0b">IPPO</text>
+<rect x="241.0" y="79.2" width="7.6" height="7.6" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="254.8" y="87.0" font-size="11.5" fill="#0b0b0b">baseline</text>
+<polygon points="340.4,76.9 346.5,83.0 340.4,89.1 334.3,83.0" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="350.4" y="87.0" font-size="11.5" fill="#0b0b0b">matched baseline</text>
+<polygon points="493.6,76.7 499.9,88.0 487.3,88.0" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="503.59999999999997" y="87.0" font-size="11.5" fill="#0b0b0b">reference follower</text>
+<clipPath id="c1839948621520"><rect x="82" y="122" width="486" height="316"/></clipPath>
+<line x1="90" x2="560" y1="397.0" y2="397.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="83" y="400.8" text-anchor="end" font-size="10.5" fill="#52514e">0.6</text>
+<line x1="90" x2="560" y1="331.1" y2="331.1" stroke="#e6e5e1" stroke-width="1"/>
+<text x="83" y="334.9" text-anchor="end" font-size="10.5" fill="#52514e">0.7</text>
+<line x1="90" x2="560" y1="265.2" y2="265.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="83" y="269.0" text-anchor="end" font-size="10.5" fill="#52514e">0.8</text>
+<line x1="90" x2="560" y1="199.2" y2="199.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="83" y="203.0" text-anchor="end" font-size="10.5" fill="#52514e">0.9</text>
+<line x1="90" x2="560" y1="133.3" y2="133.3" stroke="#e6e5e1" stroke-width="1"/>
+<text x="83" y="137.1" text-anchor="end" font-size="10.5" fill="#52514e">1</text>
+<line x1="132.9" x2="132.9" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="132.9" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="275.2" x2="275.2" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="275.2" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">10</text>
+<line x1="417.6" x2="417.6" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="417.6" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">100</text>
+<line x1="560.0" x2="560.0" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="560.0" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">1000</text>
+<line x1="90" x2="560" y1="430" y2="430" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="90" x2="90" y1="130" y2="430" stroke="#b9b8b2" stroke-width="1"/>
+<text x="90" y="118" font-size="12.5" font-weight="600" fill="#0b0b0b">(a) All controllers</text>
+<text x="325.0" y="464.0" text-anchor="middle" font-size="11" fill="#52514e">proposed conflicts per episode (log)</text>
+<text x="44.0" y="280.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 44.0 280.0)">completion (delivered ÷ released)</text>
+<g clip-path="url(#c1839948621520)">
+<line y1="133.7" y2="133.7" x1="124.0" x2="143.5" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="134.1" x2="134.1" y1="134.4" y2="133.3" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<rect x="130.3" y="129.9" width="7.6" height="7.6" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on) greedy: completion 0.999, conflicts 1.0</title></rect>
+<line y1="142.8" y2="142.8" x1="121.9" x2="143.5" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="133.1" x2="133.1" y1="146.9" y2="139.0" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<polygon points="133.1,136.7 139.2,142.8 133.1,148.9 127.0,142.8" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off) greedy: completion 0.986, conflicts 1.0</title></polygon>
+<line y1="192.0" y2="192.0" x1="494.9" x2="512.7" stroke="#77766f" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="504.6" x2="504.6" y1="200.9" y2="183.4" stroke="#77766f" stroke-width="1.2" stroke-linecap="round"></line>
+<polygon points="504.6,185.7 510.9,197.1 498.3,197.1" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower greedy: completion 0.911, conflicts 407.9</title></polygon>
+<line y1="357.1" y2="357.1" x1="201.1" x2="285.2" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="251.5" x2="251.5" y1="378.2" y2="336.5" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="251.5" cy="357.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 1 greedy: completion 0.661, conflicts 6.8</title></circle>
+<polyline points="251.5,357.1 245.8,187.1" fill="none" stroke="#2a78d6" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="245.8" cy="187.1" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 1 stochastic: completion 0.918, conflicts 6.2</title></circle>
+<line y1="407.8" y2="407.8" x1="118.4" x2="234.0" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="187.1" x2="187.1" y1="427.1" y2="389.4" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="187.1" cy="407.8" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 2 greedy: completion 0.584, conflicts 2.4</title></circle>
+<polyline points="187.1,407.8 194.7,206.9" fill="none" stroke="#2a78d6" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="194.7" cy="206.9" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 2 stochastic: completion 0.888, conflicts 2.7</title></circle>
+<line y1="413.6" y2="413.6" x1="126.9" x2="257.3" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="209.7" x2="209.7" y1="432.7" y2="394.4" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="209.7" cy="413.6" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 3 greedy: completion 0.575, conflicts 3.5</title></circle>
+<polyline points="209.7,413.6 195.3,194.1" fill="none" stroke="#2a78d6" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="195.3" cy="194.1" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 3 stochastic: completion 0.908, conflicts 2.7</title></circle>
+<line y1="141.2" y2="141.2" x1="363.6" x2="397.4" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="382.4" x2="382.4" y1="144.3" y2="138.5" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="382.4" cy="141.2" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 1 greedy: completion 0.988, conflicts 56.6</title></circle>
+<polyline points="382.4,141.2 302.3,134.0" fill="none" stroke="#eb6834" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="302.3" cy="134.0" r="4" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 1 stochastic: completion 0.999, conflicts 15.5</title></circle>
+<line y1="141.1" y2="141.1" x1="275.5" x2="333.7" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="309.9" x2="309.9" y1="144.0" y2="138.3" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="309.9" cy="141.1" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 2 greedy: completion 0.988, conflicts 17.5</title></circle>
+<polyline points="309.9,141.1 195.6,133.7" fill="none" stroke="#eb6834" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="195.6" cy="133.7" r="4" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 2 stochastic: completion 0.999, conflicts 2.8</title></circle>
+<line y1="141.4" y2="141.4" x1="359.0" x2="395.3" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="378.5" x2="378.5" y1="144.4" y2="138.6" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="378.5" cy="141.4" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 3 greedy: completion 0.988, conflicts 53.1</title></circle>
+<polyline points="378.5,141.4 293.2,133.9" fill="none" stroke="#eb6834" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="293.2" cy="133.9" r="4" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 3 stochastic: completion 0.999, conflicts 13.4</title></circle>
+<line y1="144.9" y2="144.9" x1="159.1" x2="276.2" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="235.8" x2="235.8" y1="147.9" y2="142.0" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="235.8" cy="144.9" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 1 greedy: completion 0.982, conflicts 5.3</title></circle>
+<polyline points="235.8,144.9 169.2,133.8" fill="none" stroke="#1baf7a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="169.2" cy="133.8" r="4" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 1 stochastic: completion 0.999, conflicts 1.8</title></circle>
+<line y1="140.2" y2="140.2" x1="247.1" x2="316.9" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="288.1" x2="288.1" y1="142.7" y2="138.0" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="288.1" cy="140.2" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 2 greedy: completion 0.989, conflicts 12.3</title></circle>
+<polyline points="288.1,140.2 220.3,133.8" fill="none" stroke="#1baf7a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="220.3" cy="133.8" r="4" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 2 stochastic: completion 0.999, conflicts 4.1</title></circle>
+<line y1="138.8" y2="138.8" x1="204.9" x2="292.4" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="258.2" x2="258.2" y1="141.1" y2="136.7" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="258.2" cy="138.8" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 3 greedy: completion 0.992, conflicts 7.6</title></circle>
+<polyline points="258.2,138.8 179.3,134.1" fill="none" stroke="#1baf7a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="179.3" cy="134.1" r="4" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 3 stochastic: completion 0.999, conflicts 2.1</title></circle>
+<text x="207.8" y="387.8" text-anchor="start" font-size="10.5" fill="#52514e" font-weight="normal">MADQL (greedy)</text>
+<text x="494.6" y="182.0" text-anchor="end" font-size="10.5" fill="#52514e" font-weight="normal">reference</text>
+</g>
+<clipPath id="c1839948621744"><rect x="672" y="122" width="486" height="316"/></clipPath>
+<line x1="680" x2="1150" y1="371.2" y2="371.2" stroke="#e6e5e1" stroke-width="1"/>
+<text x="673" y="375.0" text-anchor="end" font-size="10.5" fill="#52514e">0.98</text>
+<line x1="680" x2="1150" y1="253.5" y2="253.5" stroke="#e6e5e1" stroke-width="1"/>
+<text x="673" y="257.3" text-anchor="end" font-size="10.5" fill="#52514e">0.99</text>
+<line x1="680" x2="1150" y1="135.9" y2="135.9" stroke="#e6e5e1" stroke-width="1"/>
+<text x="673" y="139.7" text-anchor="end" font-size="10.5" fill="#52514e">1</text>
+<line x1="741.5" x2="741.5" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="741.5" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="945.7" x2="945.7" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="945.7" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">10</text>
+<line x1="1150.0" x2="1150.0" y1="130" y2="430" stroke="#e6e5e1" stroke-width="1"/>
+<text x="1150.0" y="445.0" text-anchor="middle" font-size="10.5" fill="#52514e">100</text>
+<line x1="680" x2="1150" y1="430" y2="430" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="680" x2="680" y1="130" y2="430" stroke="#b9b8b2" stroke-width="1"/>
+<text x="680" y="118" font-size="12.5" font-weight="600" fill="#0b0b0b">(b) Completion ≥ 0.975</text>
+<text x="915.0" y="464.0" text-anchor="middle" font-size="11" fill="#52514e">proposed conflicts per episode (log)</text>
+<text x="634.0" y="280.0" text-anchor="middle" font-size="11" fill="#52514e" transform="rotate(-90 634.0 280.0)">completion</text>
+<g clip-path="url(#c1839948621744)">
+<line y1="143.5" y2="143.5" x1="728.8" x2="756.7" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="743.3" x2="743.3" y1="156.2" y2="135.9" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<rect x="739.5" y="139.6" width="7.6" height="7.6" rx="1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Baseline (resolver on) greedy: completion 0.999, conflicts 1.0</title></rect>
+<line y1="305.1" y2="305.1" x1="725.8" x2="756.7" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="741.9" x2="741.9" y1="378.6" y2="238.3" stroke="#3d3c39" stroke-width="1.2" stroke-linecap="round"></line>
+<polygon points="741.9,299.0 747.9,305.1 741.9,311.2 735.8,305.1" fill="#3d3c39" stroke="#fcfcfb" stroke-width="1.5"><title>Matched baseline (resolver off) greedy: completion 0.986, conflicts 1.0</title></polygon>
+<line y1="1184.0" y2="1184.0" x1="1260.9" x2="1286.4" stroke="#77766f" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="1274.7" x2="1274.7" y1="1341.6" y2="1030.7" stroke="#77766f" stroke-width="1.2" stroke-linecap="round"></line>
+<polygon points="1274.7,1177.7 1281.0,1189.1 1268.4,1189.1" fill="#77766f" stroke="#fcfcfb" stroke-width="1.5"><title>Reference follower greedy: completion 0.911, conflicts 407.9</title></polygon>
+<line y1="4129.0" y2="4129.0" x1="839.4" x2="960.1" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="911.6" x2="911.6" y1="4505.6" y2="3761.4" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="911.6" cy="4129.0" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 1 greedy: completion 0.661, conflicts 6.8</title></circle>
+<polyline points="911.6,4129.0 903.4,1095.6" fill="none" stroke="#2a78d6" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="903.4" cy="1095.6" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 1 stochastic: completion 0.918, conflicts 6.2</title></circle>
+<line y1="5033.2" y2="5033.2" x1="720.8" x2="886.5" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="819.3" x2="819.3" y1="5378.1" y2="4705.1" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="819.3" cy="5033.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 2 greedy: completion 0.584, conflicts 2.4</title></circle>
+<polyline points="819.3,5033.2 830.2,1448.4" fill="none" stroke="#2a78d6" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="830.2" cy="1448.4" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 2 stochastic: completion 0.888, conflicts 2.7</title></circle>
+<line y1="5136.8" y2="5136.8" x1="732.9" x2="920.0" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="851.7" x2="851.7" y1="5478.6" y2="4794.2" stroke="#2a78d6" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="851.7" cy="5136.8" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>MADQL 3 greedy: completion 0.575, conflicts 3.5</title></circle>
+<polyline points="851.7,5136.8 831.0,1220.2" fill="none" stroke="#2a78d6" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="831.0" cy="1220.2" r="4" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>MADQL 3 stochastic: completion 0.908, conflicts 2.7</title></circle>
+<line y1="277.3" y2="277.3" x1="1072.5" x2="1120.9" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="1099.5" x2="1099.5" y1="331.7" y2="228.5" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="1099.5" cy="277.3" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 1 greedy: completion 0.988, conflicts 56.6</title></circle>
+<polyline points="1099.5,277.3 984.6,148.5" fill="none" stroke="#eb6834" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="984.6" cy="148.5" r="4" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 1 stochastic: completion 0.999, conflicts 15.5</title></circle>
+<line y1="274.8" y2="274.8" x1="946.1" x2="1029.6" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="995.4" x2="995.4" y1="326.7" y2="225.7" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="995.4" cy="274.8" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 2 greedy: completion 0.988, conflicts 17.5</title></circle>
+<polyline points="995.4,274.8 831.5,142.6" fill="none" stroke="#eb6834" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="831.5" cy="142.6" r="4" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 2 stochastic: completion 0.999, conflicts 2.8</title></circle>
+<line y1="279.8" y2="279.8" x1="1065.8" x2="1118.0" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="1093.9" x2="1093.9" y1="334.7" y2="230.5" stroke="#eb6834" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="1093.9" cy="279.8" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>MAPPO 3 greedy: completion 0.988, conflicts 53.1</title></circle>
+<polyline points="1093.9,279.8 971.4,146.8" fill="none" stroke="#eb6834" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="971.4" cy="146.8" r="4" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>MAPPO 3 stochastic: completion 0.999, conflicts 13.4</title></circle>
+<line y1="343.0" y2="343.0" x1="779.2" x2="947.1" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="889.1" x2="889.1" y1="397.1" y2="291.6" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="889.1" cy="343.0" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 1 greedy: completion 0.982, conflicts 5.3</title></circle>
+<polyline points="889.1,343.0 793.6,145.1" fill="none" stroke="#1baf7a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="793.6" cy="145.1" r="4" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 1 stochastic: completion 0.999, conflicts 1.8</title></circle>
+<line y1="259.6" y2="259.6" x1="905.4" x2="1005.5" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="964.2" x2="964.2" y1="303.4" y2="220.1" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="964.2" cy="259.6" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 2 greedy: completion 0.989, conflicts 12.3</title></circle>
+<polyline points="964.2,259.6 866.9,144.3" fill="none" stroke="#1baf7a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="866.9" cy="144.3" r="4" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 2 stochastic: completion 0.999, conflicts 4.1</title></circle>
+<line y1="234.4" y2="234.4" x1="844.9" x2="970.4" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<line x1="921.3" x2="921.3" y1="275.9" y2="197.4" stroke="#1baf7a" stroke-width="1.2" stroke-linecap="round"></line>
+<circle cx="921.3" cy="234.4" r="4.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>IPPO 3 greedy: completion 0.992, conflicts 7.6</title></circle>
+<polyline points="921.3,234.4 808.1,149.4" fill="none" stroke="#1baf7a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="2 3"></polyline>
+<circle cx="808.1" cy="149.4" r="4" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>IPPO 3 stochastic: completion 0.999, conflicts 2.1</title></circle>
+<text x="731.5" y="146.9" text-anchor="end" font-size="10.5" fill="#52514e" font-weight="normal">baseline</text>
+<text x="750.5" y="309.3" text-anchor="start" font-size="10.5" fill="#52514e" font-weight="normal">matched baseline</text>
+</g>
+<text x="24" y="488.0" font-size="10.5" fill="#8a8984">Stochastic: PPO samples its policy; MADQL uses ε-greedy with ε = 0.05 (diagnostic only; greedy is primary). Sources: Fig. 7 sources and results/dev6/stochastic/records.jsonl.</text>
+</svg>
