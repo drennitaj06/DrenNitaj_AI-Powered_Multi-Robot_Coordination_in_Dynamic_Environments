@@ -2,9 +2,10 @@
 
 * **Training checkpoints** (``*.train.pt``): online and target networks, optimiser state and the
   update counter. They stay in ``results/`` (git-ignored).
-* **Inference checkpoints** (``*.pt`` + ``*.json`` sidecar): the Q-network ``state_dict`` only,
-  plus a sidecar with the ADR-9 fields (algorithm and variant; model, observation and reward
-  specifications and versions; config hash and full config; seeds; environment steps;
+* **Inference checkpoints** (``*.pt`` + ``*.json`` sidecar): the policy network ``state_dict``
+  only — the MADQL Q-network (``mlp-q-v1``) or the PPO actor (``mlp-pi-v1``, Issue #6; masked
+  logits) — plus a sidecar with the ADR-9 fields (algorithm and variant; model, observation and
+  reward specifications and versions; config hash and full config; seeds; environment steps;
   validation score; experiment id and code version) and the file's SHA-256.
 """
 
@@ -26,7 +27,11 @@ from robocoord.marl.networks import build_mlp
 
 OBS_SPEC_VERSION = "obs-v1"  # model §6.1, 7×7×7 + 13
 REWARD_SPEC_VERSION = "reward-v1"  # model §7 base + potential shaping + team mixing
-MODEL_SPEC_VERSION = "mlp-q-v1"
+MODEL_SPEC_VERSION = "mlp-q-v1"  # MADQL Q-network (Issue #5): masked arg-max of Q-values
+ACTOR_SPEC_VERSION = "mlp-pi-v1"  # PPO actor (Issue #6): masked categorical over logits
+#: Supported inference model specifications (additive table; both are 356 → hidden → 5 MLPs and
+#: their greedy action is the masked arg-max of the outputs).
+MODEL_SPECS: dict[str, str] = {MODEL_SPEC_VERSION: "q-values", ACTOR_SPEC_VERSION: "logits"}
 SIDECAR_FIELDS = (
     "algorithm",
     "variant",
@@ -60,15 +65,18 @@ def save_inference(
     hidden: tuple[int, ...],
     obs: ObsParams,
     meta: dict[str, Any],
+    model_version: str = MODEL_SPEC_VERSION,
 ) -> Path:
     """Write ``path`` (weights) and its ``.json`` sidecar; returns the ``.pt`` path."""
+    if model_version not in MODEL_SPECS:
+        raise ValueError(f"unknown model specification {model_version!r}")
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     torch.save({k: v.detach().clone() for k, v in net.state_dict().items()}, p)
     sidecar = {
         **meta,
         "model": {
-            "version": MODEL_SPEC_VERSION,
+            "version": model_version,
             "input": obs.dim,
             "hidden": list(hidden),
             "output": N_ACTIONS,
@@ -103,7 +111,7 @@ def load_inference(path: str | Path) -> tuple[nn.Sequential, dict[str, Any], Obs
     if file_sha256(p) != meta["sha256"]:
         raise ValueError(f"{p}: SHA-256 does not match its sidecar")
     model = meta["model"]
-    if model["version"] != MODEL_SPEC_VERSION or meta["observation"]["version"] != OBS_SPEC_VERSION:
+    if model["version"] not in MODEL_SPECS or meta["observation"]["version"] != OBS_SPEC_VERSION:
         raise ValueError(f"{p}: unsupported model or observation specification")
     o = meta["observation"]
     obs = ObsParams(radius=o["radius"], path_cells=o["path_cells"], max_priority=o["max_priority"])
