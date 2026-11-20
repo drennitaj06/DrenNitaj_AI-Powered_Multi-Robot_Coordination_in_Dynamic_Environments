@@ -339,6 +339,28 @@ flowchart LR
 - **Commit messages.**
   - `feat(marl): implement PPO with centralised critic and GAE`
   - `exp(marl): add MADQL vs PPO comparative study`
+- **Outcome (Issue #6, 2026-11-20).** What was delivered against each item:
+
+  | Item | Delivered | Evidence |
+  |---|---|---|
+  | `marl.rollout`, `marl.ppo`, trainer integration | yes. One PPO core with the MAPPO / IPPO critic switch; a separate PPO trainer with resume (the MADQL trainer is unchanged) | `04` §7 notes; `tests/unit/marl/test_rollout.py`, `test_ppo.py`, `test_ppo_sanity.py`; `tests/integration/test_ppo_rollout.py`, `test_ppo_training.py` |
+  | PPO configs | `configs/training/{mappo,ippo,ppo_smoke}.toml` and the ablation cells `mappo_{zeta0,beta0,crr05,crr2}.toml` | `03` §7 |
+  | Training: MAPPO ≥ 3 seeds; IPPO ≥ 1 (target 3) | yes: MAPPO and IPPO × run seeds 1–3 × 1 000 000 environment steps, A\* only | `05` §B.6 E4 (PPO part) |
+  | Reward ablation | yes, Option C (approved D3): ζ = 0, β = 0, $c_{\text{rr}}$ = 0.5, $c_{\text{rr}}$ = 2 on MAPPO × 2 seeds | `05` §B.6 E4 reward ablation |
+  | Complete E4 | yes: curves, steps to threshold, stability, cost and memory for MADQL and PPO; H5 assessed | `05` §B.6 E4 |
+  | Development comparison on block B, incl. the shield ablation | yes, plus the matched baseline (D11) and the stochastic diagnostic (D6) | `05` §B.6 (Issue #6 development comparison) |
+  | X-4 (16 combinations) | yes, plus the 8 shielded learned-controller variants | `tests/integration/test_x4_matrix.py` |
+  | RRT\*-in-training decision | measured (pilot): **borderline** (36.3 h untrained, 5.9 h reference-follower, threshold 24 h). Not added; the decision is the student's | V-17; `03` §7 |
+  | `models/` checkpoints | candidates identified, **none committed**; awaiting the student's approval | V-18 |
+  | Additional modules | `marl/pilot.py` (RRT\* pilot), `marl/study.py` (block-B experiments and analysis); additive extensions to `vector_env`, `checkpoint`, `policy`, `evaluation`, `devcompare` and the CLI | `03` §5.6 notes; V-16 |
+
+  - *Acceptance criteria* (verification log V-16 to V-18):
+    1. **Met.** All PPO L1/L2 tests pass, including the masked bandit and the chain MDP for both variants, R1–R6 (truncation bootstrap through the vector environment), and the `training`-marked improvement test against a random policy.
+    2. **Met.** MADQL (Issue #5) and MAPPO and IPPO (Issue #6) are each trained with 3 seeds under the documented common budget of 1 000 000 environment steps, with the same composition, curriculum, scenario order and selection rule.
+    3. **Met as a reporting criterion.** E4 reports curves and block-B comparisons with CIs and effect sizes. Negative and null results are reported: MADQL's completion shortfall stands; the reward ablation shows no completion effect and its other differences are confounded with the selected step; PPO proposes more conflicts than the baselines and its completion is below the resolver-equipped baseline.
+    4. **Met.** All 16 planner × allocator × controller combinations run (X-4), plus each learned controller with the shield on.
+    5. **Pending the student's decision.** No checkpoint is committed. Candidate inference-only files (636 401 bytes each, < 5 MB) with complete sidecars are proposed for approval.
+  - *Not done here (by scope):* E5/E6 on test seeds (Issue #8), Kaggle scenarios (Issue #7), VDN (deferred by the student). Open decisions for the student: RRT\* in training, the `models/` files, and whether to revise the completion-first selection rule now that completion saturates near 0.99.
 
 ---
 
