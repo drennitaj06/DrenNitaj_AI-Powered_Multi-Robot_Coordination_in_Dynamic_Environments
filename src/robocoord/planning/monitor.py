@@ -22,6 +22,15 @@ Implementation choices (documented in ``04`` §5.2 notes):
   the occupied-goal policy of model §5.3; the counter is reset and no replan is made.
 * **T5** fires for a robot without a valid plan once ``T_cd`` steps have passed since the failed
   call.
+* **Repair before replanning** (Issue 6A Phase 1, proposal P1; off by default,
+  ``repair_radius = 0``): on a T3 deviation the monitor first searches, breadth-first over
+  statically free cells outside ``B_i(t)`` and the proximity set ``Q_i(t)``, a connector of at
+  most ``repair_radius`` moves from the robot to a cell of its *remaining* reference path (the
+  shortest connector; ties → the cell furthest along). The repaired path is the connector plus
+  the rest of the old path; it is kept only if it passes the T2 check (the next ``H_v`` cells
+  free of ``S(t) ∪ B_i(t)``). Otherwise, or on a degraded plan, the T3 planner call is made as
+  before. A repaired deviation is still a deviation (``deviations``), but not a planner call;
+  repairs are counted separately. With ``repair_radius = 0`` the monitor is unchanged.
 
 Time: O(H_r + H_v) per robot per step, plus planner calls.
 """
@@ -61,11 +70,14 @@ class MonitorParams:
     rejoin_window: int = 3
     cooldown: int = 3
     stall_threshold: int = 4
+    repair_radius: int = 0  # Issue 6A Phase 1 (P1): 0 = off (the original monitor)
 
     def __post_init__(self) -> None:
         for name in ("validity_horizon", "rejoin_window", "cooldown", "stall_threshold"):
             if getattr(self, name) < 1:
                 raise ConfigError(f"monitor.{name}", "must be >= 1")
+        if self.repair_radius < 0:
+            raise ConfigError("monitor.repair_radius", "must be >= 0")
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,6 +192,8 @@ class PathMonitor:
         self.legs: list[LegRecord] = []
         self.active_robot_steps = 0
         self.deviations = 0  # T3 calls of counted (non-idle) robots
+        self.repairs = 0  # T3 deviations repaired without a planner call (P1)
+        self.repair_failures = 0  # T3 deviations whose repair failed (a planner call followed)
         self.last_results: dict[int, PlanResult] = {}
 
     # ------------------------------------------------------------------ per step
@@ -197,6 +211,11 @@ class PathMonitor:
             if trigger is not None:
                 if trigger == "T3" and r.count_active:
                     self.deviations += 1
+                if trigger == "T3" and self.params.repair_radius > 0:
+                    if self._repair(r, obstacles):
+                        self.repairs += 1
+                        continue
+                    self.repair_failures += 1
                 made.append(self._plan(t, r, trigger, obstacles))
         self.calls.extend(made)
         return made
@@ -325,6 +344,58 @@ class PathMonitor:
             len(res.path) - 1 if res.path is not None else -1,
             stats,
         )
+
+    def _repair(self, r: RobotInput, obstacles: Mapping[Cell, Cell]) -> bool:
+        """P1: rejoin the remaining reference path by a connector of at most ``repair_radius``
+        moves; ``True`` (and the path replaced) on success. Deterministic (canonical neighbour
+        order; the shortest connector, then the furthest path cell)."""
+        st = self.states[r.id]
+        if st.path is None or st.degraded or st.goal is None:
+            return False
+        pos, goal, path = r.position, st.goal, st.path
+        cons = build_constraints(
+            self.grid, pos, goal, obstacles, self.constraint_params, _extra(st, r)
+        )
+        dynamic = cons.dynamic_blocked
+        avoid = dynamic | cons.proximity
+        targets: dict[Cell, int] = {}
+        for j in range(st.index, len(path)):
+            targets[path[j]] = j  # the last occurrence: furthest along
+        prev: dict[Cell, Cell | None] = {pos: None}
+        frontier = [pos]
+        depth = 0
+        while True:
+            hits = [c for c in frontier if c in targets]
+            if hits:
+                break
+            if depth >= self.params.repair_radius:
+                return False
+            nxt: list[Cell] = []
+            for c in frontier:
+                for n in self.grid.neighbors(c):
+                    if n in prev or (n in avoid and n != goal):
+                        continue
+                    prev[n] = c
+                    nxt.append(n)
+            if not nxt:
+                return False
+            frontier = nxt
+            depth += 1
+        best = max(hits, key=lambda c: targets[c])
+        connector: list[Cell] = []
+        node: Cell | None = best
+        while node is not None:
+            connector.append(node)
+            node = prev[node]
+        connector.reverse()
+        repaired = (*connector, *path[targets[best] + 1 :])
+        if self.grid.is_blocked(goal):
+            return False
+        for c in repaired[1 : 1 + self.params.validity_horizon]:
+            if self.grid.is_blocked(c) or (c != goal and c in dynamic):
+                return False
+        st.path, st.index, st.stall = repaired, 0, 0
+        return True
 
     def _close_leg(self, robot: int, t: int) -> None:
         st = self.states[robot]

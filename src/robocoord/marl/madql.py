@@ -6,6 +6,13 @@
 * Double-DQN target ``y = r + γ (1 − d) Q_θ⁻(o', argmax_{a' ∈ m'} Q_θ(o', a'))`` with ``d = 1``
   only for termination (truncation bootstraps), Huber loss, Adam, gradient-norm clip.
 
+Issue 6A Phase 4 (optional, off by default): ``n_step`` > 1 replaces the one-step target by the
+n-step Double-DQN target ``y = Σ_{k<h} γ^k r_{t+k} + γ^h (1 − d) Q_θ⁻(o_{t+h}, argmax …)`` with
+``h = n`` or, when the episode ends earlier, the number of remaining steps
+(``replay.NStepAccumulator``).
+With ``n_step = 1`` (the default) every computation, the configuration dictionary and its hash
+are exactly those of Issue #5.
+
 No convergence guarantee is claimed (G16): the other robots' policies change while learning.
 """
 
@@ -42,6 +49,7 @@ class MADQLParams:
     eps_fraction: float = 0.3
     grad_clip: float = 10.0
     hidden: tuple[int, ...] = field(default=(256, 256))
+    n_step: int = 1  # Issue 6A Phase 4: n-step return length; 1 = the Issue #5 one-step target
 
     def __post_init__(self) -> None:
         positive = ("lr", "batch_size", "buffer_size", "train_freq", "target_period", "grad_clip")
@@ -58,6 +66,8 @@ class MADQLParams:
             raise ConfigError("madql.eps_fraction", "must be in (0, 1]")
         if not self.hidden or any(h < 1 for h in self.hidden):
             raise ConfigError("madql.hidden", "need at least one positive layer width")
+        if isinstance(self.n_step, bool) or not isinstance(self.n_step, int) or self.n_step < 1:
+            raise ConfigError("madql.n_step", "must be an integer >= 1")
 
     def epsilon(self, step: int, total: int) -> float:
         """Linear decay from ``eps_start`` to ``eps_end`` over ``eps_fraction`` of ``total``."""
@@ -68,6 +78,8 @@ class MADQLParams:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["hidden"] = list(self.hidden)
+        if self.n_step == 1:  # default: the Issue #5 dictionary (and config hash) unchanged
+            del d["n_step"]
         return d
 
 
@@ -97,9 +109,10 @@ def double_dqn_targets(
     next_masks: torch.Tensor,
     rewards: torch.Tensor,
     dones: torch.Tensor,
-    gamma: float,
+    gamma: float | torch.Tensor,
 ) -> torch.Tensor:
-    """``r + γ (1 − d) Q_target(o', argmax_{a' ∈ m'} Q_online(o', a'))``."""
+    """``r + γ (1 − d) Q_target(o', argmax_{a' ∈ m'} Q_online(o', a'))``. ``gamma`` may be a
+    per-row tensor (``γ^h`` of the n-step target); ``rewards`` are then the n-step sums."""
     best = masked_argmax(q_next_online, next_masks)
     q_sel = q_next_target.gather(1, best.unsqueeze(1)).squeeze(1)
     return rewards + gamma * (1.0 - dones) * q_sel
@@ -141,6 +154,13 @@ class MADQL:
     def loss(self, batch: Batch) -> torch.Tensor:
         obs = torch.from_numpy(batch.obs)
         nxt = torch.from_numpy(batch.next_obs)
+        gamma: float | torch.Tensor = self.params.gamma
+        if self.params.n_step > 1:
+            if batch.horizons is None:
+                raise ValueError("an n-step learner needs batches with horizons")
+            gamma = torch.from_numpy(
+                np.power(np.float32(self.params.gamma), batch.horizons).astype(np.float32)
+            )
         with torch.no_grad():
             y = double_dqn_targets(
                 self.q(nxt),
@@ -148,7 +168,7 @@ class MADQL:
                 torch.from_numpy(batch.next_masks),
                 torch.from_numpy(batch.rewards),
                 torch.from_numpy(batch.dones),
-                self.params.gamma,
+                gamma,
             )
         q = self.q(obs).gather(1, torch.from_numpy(batch.actions).unsqueeze(1)).squeeze(1)
         return nn.functional.smooth_l1_loss(q, y)

@@ -14,6 +14,10 @@ Step counts are environment steps summed over the ``E`` vectorised copies (D3). 
 the 60 block-A A* episodes with the greedy policy; the checkpoint selection is lexicographic —
 overall completion, then mean discounted base return (approved). RRT* validation (10 block-A
 seeds, full dynamics) is reported but never selects. Training uses A* only (approved).
+
+Issue 6A Phase 4: with ``madql.n_step`` > 1 the transitions pass through a
+:class:`~robocoord.marl.replay.NStepAccumulator` (one queue per copy) before they are stored;
+with the default ``n_step = 1`` the loop is exactly the Issue #5 one.
 """
 
 from __future__ import annotations
@@ -46,7 +50,7 @@ from robocoord.marl.evaluation import (
 )
 from robocoord.marl.madql import MADQL, MADQLParams
 from robocoord.marl.networks import configure_torch
-from robocoord.marl.replay import ReplayBuffer
+from robocoord.marl.replay import NStepAccumulator, ReplayBuffer
 from robocoord.marl.scenarios import CURRICULUM, Stage, stage_at, training_seed_order
 from robocoord.marl.vector_env import SyncVectorEnv
 from robocoord.scenario.spec import ScenarioSpec
@@ -163,6 +167,7 @@ class Trainer:
         envs = [MultiRobotEnv(config=cfg.env) for _ in range(cfg.n_envs)]
         venv = SyncVectorEnv(envs, self.next_scenario)
         obs, masks = venv.reset()
+        nstep = NStepAccumulator(p.n_step, p.gamma, cfg.n_envs) if p.n_step > 1 else None
         next_update, next_target = p.train_freq, p.target_period
         next_log = cfg.log_interval
         v = cfg.validation
@@ -180,8 +185,15 @@ class Trainer:
             res = venv.step(split)
             for k, tr in enumerate(res.transitions):
                 n = sizes[k]
-                self.buffer.add(obs[k], split[k], tr.rewards, tr.next_obs, tr.next_masks,
-                                np.full(n, float(tr.terminated)))  # fmt: skip
+                if nstep is None:
+                    self.buffer.add(obs[k], split[k], tr.rewards, tr.next_obs, tr.next_masks,
+                                    np.full(n, float(tr.terminated)))  # fmt: skip
+                    continue
+                out = nstep.push(k, obs[k], split[k], tr.rewards, tr.next_obs, tr.next_masks,
+                                 tr.terminated, tr.truncated)  # fmt: skip
+                if out is not None:
+                    self.buffer.add(out.obs, out.actions, out.rewards, out.next_obs,
+                                    out.next_masks, out.dones, out.horizons)  # fmt: skip
             self.env_steps += cfg.n_envs
             while self.env_steps >= next_update:
                 if len(self.buffer) >= p.warmup:
