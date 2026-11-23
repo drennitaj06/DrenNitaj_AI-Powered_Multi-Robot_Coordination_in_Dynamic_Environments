@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 473" width="1180" height="473" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" role="img" aria-label="Fig. 12 — Reward ablation, Option C (MAPPO, run seeds 1 and 2)">
+<title>Fig. 12 — Reward ablation, Option C (MAPPO, run seeds 1 and 2)</title>
+<rect width="1180" height="473" fill="#fcfcfb"/>
+<text x="24" y="30" font-size="16" font-weight="650" fill="#0b0b0b">Fig. 12 — Reward ablation, Option C (MAPPO, run seeds 1 and 2)</text>
+<text x="24" y="50" font-size="11.5" fill="#52514e">Dots = the two run seeds of each cell; (a, b) block B, A*, 240 episodes per policy; (c) block A, mean of the 11 validations from 500 k to 1 M steps (selection-independent)</text>
+<circle cx="30.0" cy="68.0" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="40.0" y="72.0" font-size="11.5" fill="#0b0b0b">run seed 1</text>
+<polygon points="140.0,61.9 146.1,68.0 140.0,74.1 133.9,68.0" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="150.0" y="72.0" font-size="11.5" fill="#0b0b0b">run seed 2</text>
+<clipPath id="c1839948623760"><rect x="242" y="107" width="276" height="286"/></clipPath>
+<line x1="250" x2="510" y1="142.0" y2="142.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="146.0" text-anchor="end" font-size="11" fill="#0b0b0b">default (ζ=1, β=0.3, c_rr=1)</text>
+<line x1="250" x2="510" y1="196.0" y2="196.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="200.0" text-anchor="end" font-size="11" fill="#0b0b0b">ζ = 0 (no shaping)</text>
+<line x1="250" x2="510" y1="250.0" y2="250.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="254.0" text-anchor="end" font-size="11" fill="#0b0b0b">β = 0 (individual reward)</text>
+<line x1="250" x2="510" y1="304.0" y2="304.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="308.0" text-anchor="end" font-size="11" fill="#0b0b0b">c_rr = 0.5</text>
+<line x1="250" x2="510" y1="358.0" y2="358.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="242" y="362.0" text-anchor="end" font-size="11" fill="#0b0b0b">c_rr = 2</text>
+<line x1="250.0" x2="250.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="250.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.97</text>
+<line x1="336.7" x2="336.7" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="336.7" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.98</text>
+<line x1="423.3" x2="423.3" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="423.3" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">0.99</text>
+<line x1="510.0" x2="510.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="510.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="250" x2="510" y1="385" y2="385" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="250" x2="250" y1="115" y2="385" stroke="#b9b8b2" stroke-width="1"/>
+<text x="250" y="103" font-size="12.5" font-weight="600" fill="#0b0b0b">(a) Completion, block B</text>
+<text x="380.0" y="419.0" text-anchor="middle" font-size="11" fill="#52514e">delivered ÷ released</text>
+<g clip-path="url(#c1839948623760)">
+<line y1="133.9" y2="133.9" x1="365.7" x2="441.8" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="405.8" cy="133.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo-seed1: completion 0.9880 [0.9834, 0.9921]</title></circle>
+<line y1="150.1" y2="150.1" x1="369.4" x2="443.8" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="407.7,145.0 412.8,150.1 407.7,155.2 402.5,150.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo-seed2: completion 0.9882 [0.9838, 0.9924]</title></polygon>
+<line y1="187.9" y2="187.9" x1="317.9" x2="407.5" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="364.9" cy="187.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_zeta0-seed1: completion 0.9833 [0.9778, 0.9882]</title></circle>
+<line y1="204.1" y2="204.1" x1="341.2" x2="424.1" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="385.3,199.0 390.5,204.1 385.3,209.2 380.2,204.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_zeta0-seed2: completion 0.9856 [0.9805, 0.9901]</title></polygon>
+<line y1="241.9" y2="241.9" x1="413.7" x2="471.1" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="444.9" cy="241.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_beta0-seed1: completion 0.9925 [0.9889, 0.9955]</title></circle>
+<line y1="258.1" y2="258.1" x1="351.4" x2="419.1" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="387.2,253.0 392.3,258.1 387.2,263.2 382.1,258.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_beta0-seed2: completion 0.9858 [0.9817, 0.9895]</title></polygon>
+<line y1="295.9" y2="295.9" x1="342.5" x2="417.7" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="381.6" cy="295.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr05-seed1: completion 0.9852 [0.9807, 0.9893]</title></circle>
+<line y1="312.1" y2="312.1" x1="407.6" x2="466.4" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="439.3,307.0 444.4,312.1 439.3,317.2 434.2,312.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr05-seed2: completion 0.9918 [0.9882, 0.9950]</title></polygon>
+<line y1="349.9" y2="349.9" x1="381.7" x2="454.1" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="418.8" cy="349.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr2-seed1: completion 0.9895 [0.9852, 0.9935]</title></circle>
+<line y1="366.1" y2="366.1" x1="361.6" x2="434.4" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="398.4,361.0 403.5,366.1 398.4,371.2 393.2,366.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr2-seed2: completion 0.9871 [0.9829, 0.9913]</title></polygon>
+</g>
+<clipPath id="c1839948624208"><rect x="562" y="107" width="276" height="286"/></clipPath>
+<line x1="570" x2="830" y1="142.0" y2="142.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="146.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="196.0" y2="196.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="200.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="250.0" y2="250.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="254.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="304.0" y2="304.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="308.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570" x2="830" y1="358.0" y2="358.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="562" y="362.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="570.0" x2="570.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="570.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">1</text>
+<line x1="700.0" x2="700.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="700.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">10</text>
+<line x1="830.0" x2="830.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="830.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">100</text>
+<line x1="570" x2="830" y1="385" y2="385" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="570" x2="570" y1="115" y2="385" stroke="#b9b8b2" stroke-width="1"/>
+<text x="570" y="103" font-size="12.5" font-weight="600" fill="#0b0b0b">(b) Conflicts per episode, block B</text>
+<text x="700.0" y="419.0" text-anchor="middle" font-size="11" fill="#52514e">conflicts (log)</text>
+<g clip-path="url(#c1839948624208)">
+<line y1="133.9" y2="133.9" x1="780.7" x2="811.5" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="797.9" cy="133.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo-seed1: conflicts 56.60 [41.75, 72.06]</title></circle>
+<line y1="150.1" y2="150.1" x1="700.3" x2="753.4" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="731.6,145.0 736.7,150.1 731.6,155.2 726.5,150.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo-seed2: conflicts 17.50 [10.05, 25.73]</title></polygon>
+<line y1="187.9" y2="187.9" x1="600.9" x2="681.2" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="647.1" cy="187.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_zeta0-seed1: conflicts 3.92 [1.73, 7.17]</title></circle>
+<line y1="204.1" y2="204.1" x1="658.8" x2="727.8" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="700.0,199.0 705.1,204.1 700.0,209.2 694.9,204.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_zeta0-seed2: conflicts 10.00 [4.82, 16.37]</title></polygon>
+<line y1="241.9" y2="241.9" x1="602.3" x2="698.6" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="662.5" cy="241.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_beta0-seed1: conflicts 5.15 [1.77, 9.75]</title></circle>
+<line y1="258.1" y2="258.1" x1="572.1" x2="677.3" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="623.9,253.0 629.1,258.1 623.9,263.2 618.8,258.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_beta0-seed2: conflicts 2.60 [1.04, 6.69]</title></polygon>
+<line y1="295.9" y2="295.9" x1="639.9" x2="701.6" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="674.3" cy="295.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr05-seed1: conflicts 6.34 [3.45, 10.28]</title></circle>
+<line y1="312.1" y2="312.1" x1="590.0" x2="611.0" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="600.8,307.0 605.9,312.1 600.8,317.2 595.7,312.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr05-seed2: conflicts 1.73 [1.43, 2.07]</title></polygon>
+<line y1="349.9" y2="349.9" x1="598.1" x2="679.0" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<circle cx="642.0" cy="349.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr2-seed1: conflicts 3.58 [1.65, 6.89]</title></circle>
+<line y1="366.1" y2="366.1" x1="578.5" x2="673.8" stroke="#eb6834" stroke-width="1.4" stroke-linecap="round"></line>
+<polygon points="631.3,361.0 636.4,366.1 631.3,371.2 626.2,366.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr2-seed2: conflicts 2.96 [1.16, 6.28]</title></polygon>
+</g>
+<clipPath id="c1839948624656"><rect x="882" y="107" width="276" height="286"/></clipPath>
+<line x1="890" x2="1150" y1="142.0" y2="142.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="146.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="196.0" y2="196.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="200.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="250.0" y2="250.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="254.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="304.0" y2="304.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="308.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890" x2="1150" y1="358.0" y2="358.0" stroke="#e6e5e1" stroke-width="1"/>
+<text x="882" y="362.0" text-anchor="end" font-size="11" fill="#0b0b0b"></text>
+<line x1="890.0" x2="890.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="890.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">3.3</text>
+<line x1="942.0" x2="942.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="942.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">3.4</text>
+<line x1="994.0" x2="994.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="994.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">3.5</text>
+<line x1="1046.0" x2="1046.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="1046.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">3.6</text>
+<line x1="1098.0" x2="1098.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="1098.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">3.7</text>
+<line x1="1150.0" x2="1150.0" y1="115" y2="385" stroke="#e6e5e1" stroke-width="1"/>
+<text x="1150.0" y="400.0" text-anchor="middle" font-size="10.5" fill="#52514e">3.8</text>
+<line x1="890" x2="1150" y1="385" y2="385" stroke="#b9b8b2" stroke-width="1"/>
+<line x1="890" x2="890" y1="115" y2="385" stroke="#b9b8b2" stroke-width="1"/>
+<text x="890" y="103" font-size="12.5" font-weight="600" fill="#0b0b0b">(c) Base return, block A late</text>
+<text x="1020.0" y="419.0" text-anchor="middle" font-size="11" fill="#52514e">mean discounted base return</text>
+<g clip-path="url(#c1839948624656)">
+<circle cx="1026.5" cy="133.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_seed1: block-A late mean return 3.562 (11 validations); selected at 200,000</title></circle>
+<text x="1034.5" y="137.9" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 200 k</text>
+<polygon points="1046.6,145.0 1051.8,150.1 1046.6,155.2 1041.5,150.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_seed2: block-A late mean return 3.601 (11 validations); selected at 300,000</title></polygon>
+<text x="1054.6" y="154.1" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 300 k</text>
+<circle cx="1028.1" cy="187.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_zeta0_seed1: block-A late mean return 3.566 (11 validations); selected at 750,000</title></circle>
+<text x="1036.1" y="191.9" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 750 k</text>
+<polygon points="1046.8,199.0 1052.0,204.1 1046.8,209.2 1041.7,204.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_zeta0_seed2: block-A late mean return 3.602 (11 validations); selected at 450,000</title></polygon>
+<text x="1054.8" y="208.1" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 450 k</text>
+<circle cx="1018.1" cy="241.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_beta0_seed1: block-A late mean return 3.546 (11 validations); selected at 700,000</title></circle>
+<text x="1026.1" y="245.9" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 700 k</text>
+<polygon points="1069.6,253.0 1074.7,258.1 1069.6,263.2 1064.5,258.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_beta0_seed2: block-A late mean return 3.645 (11 validations); selected at 800,000</title></polygon>
+<text x="1077.6" y="262.1" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 800 k</text>
+<circle cx="1003.5" cy="295.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr05_seed1: block-A late mean return 3.518 (11 validations); selected at 250,000</title></circle>
+<text x="1011.5" y="299.9" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 250 k</text>
+<polygon points="1006.5,307.0 1011.7,312.1 1006.5,317.2 1001.4,312.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr05_seed2: block-A late mean return 3.524 (11 validations); selected at 1,000,000</title></polygon>
+<text x="1014.5" y="316.1" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 1000 k</text>
+<circle cx="1006.7" cy="349.9" r="3.8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr2_seed1: block-A late mean return 3.524 (11 validations); selected at 350,000</title></circle>
+<text x="1014.7" y="353.9" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 350 k</text>
+<polygon points="1056.8,361.0 1061.9,366.1 1056.8,371.2 1051.6,366.1" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>mappo_crr2_seed2: block-A late mean return 3.621 (11 validations); selected at 750,000</title></polygon>
+<text x="1064.8" y="370.1" text-anchor="start" font-size="9.5" fill="#52514e" font-weight="normal">sel. 750 k</text>
+</g>
+<text x="24" y="443.0" font-size="10.5" fill="#8a8984">The default cell&#x27;s selected checkpoints (200 k and 300 k steps) carry most of its block-B conflicts; late in training (c) all cells look alike. Cell − default statistics: results/dev6/summary.md.</text>
+<text x="24" y="458.0" font-size="10.5" fill="#8a8984">Sources: results/dev6/{ablation,ppo}/records.jsonl, results/training/mappo*_seed{1,2}/validation.jsonl.</text>
+</svg>

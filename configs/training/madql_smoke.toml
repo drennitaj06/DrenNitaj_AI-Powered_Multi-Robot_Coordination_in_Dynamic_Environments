@@ -1,0 +1,24 @@
+# Tiny MADQL configuration for the end-to-end `train` smoke test and quick checks (Issue #5).
+# Not a result configuration.
+
+[run]
+name = "madql-smoke"
+run_seed = 1
+total_steps = 200
+n_envs = 2
+log_interval = 100
+
+[madql]
+batch_size = 32
+buffer_size = 5000
+warmup = 64
+train_freq = 4
+target_period = 50
+hidden = [32, 32]
+
+[validation]
+interval = 0
+rrt_interval = 0
+rrt = false
+workers = 1
+seeds_per_level = 1

@@ -81,6 +81,14 @@ class WorldView:
     ``masks[i][a]`` is True if action ``a`` is allowed for robot ``i`` (static feasibility, ADR-10).
     ``suggested`` holds the planner's suggested actions, or ``None`` when no planner is attached.
     Obstacle positions at ``t + 1`` are deliberately *not* included (model §2).
+
+    Optional extras (Issue #5, ``Engine(view_extras=...)``; ``None`` unless requested, and only on
+    the view a controller acts on):
+
+    * ``reference_paths[i]`` — robot ``i``'s remaining reference path ``c_ℓ, …`` (``c_ℓ`` is its
+      own cell), truncated to the engine's ``path_limit`` moves, or ``None`` without a valid plan;
+    * ``goal_distance[i]`` — the capped static distance ``D̄(x_i, g_i)`` (model §1), or ``None``
+      when the robot is idle.
     """
 
     t: int
@@ -91,6 +99,8 @@ class WorldView:
     tasks: tuple[TaskView, ...]
     masks: tuple[tuple[bool, ...], ...]
     suggested: tuple[Action, ...] | None
+    reference_paths: tuple[tuple[Cell, ...] | None, ...] | None = None
+    goal_distance: tuple[int | None, ...] | None = None
 
     def robot_cells(self) -> dict[Cell, int]:
         return {r.position: r.id for r in self.robots}

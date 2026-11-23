@@ -112,9 +112,9 @@ Design notes:
 
 | Concern | Choice | Why this fits *this* project |
 |---|---|---|
-| Language | **Python 3.12–3.14** | Binding decision D-1. 3.12+ provides `tomllib`, modern typing and faster CPython. Supported versions are those passing the CI matrix (§3.3). Python 3.14-compatible releases of torch, numpy and pygame-ce were seen on PyPI on 2026-11-17; actual installation is verified in Issue #2. |
+| Language | **Python 3.12–3.14** | Binding decision D-1. 3.12+ provides `tomllib`, modern typing and faster CPython. Supported versions are those passing the CI matrix (§3.3). Python 3.14-compatible releases of torch, numpy and pygame-ce were seen on PyPI on 2026-11-17. Installation is verified for NumPy and SciPy (Issues #2–#4) and for torch 2.15.0+cpu on Windows 11 / Python 3.14.3 (`verification-log.md` V-12); pygame-ce is not yet verified (Issue #8). |
 | Numerics | **NumPy** | Occupancy grids, distance fields, observation tensors, vectorised geometry, the brute-force neighbour index and the k-d tree build (`argpartition`). Seeded `numpy.random.Generator` streams. |
-| Deep learning | **PyTorch (CPU)** | Small MLPs (~10⁵ parameters). Explicit training loops written by us, so the algorithms are not hidden in a library. CPU is sufficient (NFR-PERF-3). |
+| Deep learning | **PyTorch (CPU), optional extra `marl`** | Not a base dependency (§3.4). Small MLPs (~10⁵ parameters). Explicit training loops written by us, so the algorithms are not hidden in a library. CPU is sufficient (NFR-PERF-3). |
 | Scientific utilities | **SciPy** | `linear_sum_assignment` (Hungarian) as an **independent oracle** for the auction. Statistical tests (Wilcoxon) and bootstrap utilities. SciPy's `cKDTree` is **not** used inside RRT\*; see §3.2. |
 | Results handling | **pandas** | Aggregating per-run records in the experiment/analysis layer only. |
 | Plots | **Matplotlib** | Static figures for the report. |
@@ -122,7 +122,7 @@ Design notes:
 | Configuration | **TOML via `tomllib`** + frozen `dataclasses` with explicit validation | Human-readable, no extra dependency. Errors name the offending field. |
 | Testing | **pytest**, **Hypothesis**, **pytest-cov** | Property-based tests against independent oracles. |
 | Quality | **ruff** (lint + format), **mypy** | NFR-MAINT-1. |
-| Packaging | `pyproject.toml` (PEP 621), `src/` layout, `venv`, editable install; `requirements-lock.txt` | Standard and reproducible. |
+| Packaging | `pyproject.toml` (PEP 621), `src/` layout, `venv`, editable install; `requirements-lock.txt` (base) and `requirements-lock-marl.txt` (MARL add-on, §3.4) | Standard and reproducible. |
 | Kaggle access | Kaggle CLI/API (optional extra) or manual browser download | Downloads use the student's own account. Preprocessing is pure Python/pandas. |
 
 ### 3.2 Alternatives considered
@@ -146,14 +146,41 @@ Design notes:
 | Job | Matrix | Steps |
 |---|---|---|
 | `quality` | ubuntu-latest × Python 3.14 | `ruff check .`, `ruff format --check .`, `mypy src/robocoord` |
-| `tests` | ubuntu-latest × Python {3.12, 3.13, 3.14}; windows-latest × Python 3.14 | `pip install -e ".[dev]"`, `pytest` (fast suite only); from Issue #5 also CPU-only PyTorch (CPU wheel index on Linux) |
+| `tests` | ubuntu-latest × Python {3.12, 3.13, 3.14}; windows-latest × Python 3.14 | `pip install -e ".[dev,marl]" --extra-index-url https://download.pytorch.org/whl/cpu`, a check that `torch.version.cuda is None`, `pytest` (fast suite only); see §3.4 |
 
 Slow, training and e2e tests run locally before an issue is closed (`05` §A.5), not in CI. CI results are recorded in the verification log by the student's report or a screenshot. Claude cannot see GitHub-hosted runs unless the student shares them.
 
 **Dependency versions: what CI and the local environment share (Issue #4).**
-- CI installs from `pyproject.toml` (`pip install -e ".[dev]"`); the local environment installs from `requirements-lock.txt`. Test tooling that affects test behaviour is pinned **exactly** in `pyproject.toml`, so both resolve the same version: `hypothesis==6.155.7` and `scipy==1.18.1`.
+- CI installs from `pyproject.toml` (`.[dev]` in the `quality` job, `.[dev,marl]` with the CPU index in the `tests` job); the local environment installs from `requirements-lock.txt`. Test tooling that affects test behaviour is pinned **exactly** in `pyproject.toml`, so both resolve the same version: `hypothesis==6.155.7` and `scipy==1.18.1`.
 - **NumPy is deliberately not identical.** The package declares `numpy>=2.0` (a runtime dependency for users), so CI resolves the newest release (2.5.5 at the time of writing). The lock file pins 2.4.6, because Windows Application Control on the development machine blocks NumPy 2.5.5's `random/_philox` extension (Issue #2). This is an OS-policy constraint, not a compatibility one. Both versions satisfy the declared range, and CI therefore also exercises a second NumPy version.
 - **Effect on results:** tests compare runs within one environment, so determinism tests (X-1) are unaffected. Recorded experiments run locally, and every run directory stores its NumPy version in `env.json`. Cross-version bit-identity of `Generator` sampling methods is not assumed: NumPy guarantees stream compatibility for its bit generators, not for every sampling method. Numbers are therefore reproducible with the lock file, not necessarily with another NumPy release.
+
+### 3.4 Optional dependencies and installation (Issue #5)
+
+PyTorch is **not** a base dependency. `pyproject.toml` declares it as the optional extra `marl` (`torch==2.15.0`). The only base runtime dependency stays `numpy>=2.0`.
+
+**Why the base stays independent of PyTorch.** The simulator (`core`, `world`, `scenario`, `sim`), the planners (`planning`), the allocators (`allocation`) and the non-learned controllers (`control`) are the environment from the learner's point of view (ADR-2). They run on NumPy alone, and no module outside `robocoord.marl` imports torch. Only the learned part (`marl`, Issues #5–#6) needs it. A base installation therefore stays small, does not depend on torch wheel availability, and runs the whole Issue #2–#4 test suite and experiments (E1–E3 and the Issue #4 non-learned system runs). *Design rule for Issue #5, implemented:* torch is imported at module level only by `marl/{networks,madql,checkpoint,policy,trainer}.py`, and lazily by `marl/evaluation.py` (learned controllers only) and by the CLI's `madql` and `train` paths. Without the extra, the CLI reports a configuration error naming the install command (exit code 2). The NumPy-only `marl` modules (`config`, `observation`, `reward`, `global_state`, `scenarios`, `env`, `vector_env`, `replay`) import without torch. Tests that need torch use `pytest.importorskip("torch")`, so a base installation still passes its own tests.
+
+**Supported installation commands** (inside a virtual environment):
+
+| Purpose | Command |
+|---|---|
+| Base | `pip install -e .` |
+| Development | `pip install -e ".[dev]"` |
+| MARL, CPU-only PyTorch | `pip install -e ".[marl]" --extra-index-url https://download.pytorch.org/whl/cpu` |
+| Development + MARL (what CI runs) | `pip install -e ".[dev,marl]" --extra-index-url https://download.pytorch.org/whl/cpu` |
+| Base lock (exact versions, no PyTorch) | `pip install -r requirements-lock.txt -e .` |
+| MARL lock (exact versions, CPU-only PyTorch) | `pip install -r requirements-lock-marl.txt -e ".[marl]"` |
+
+`pip install -e ".[marl]"` **without** the CPU index is not supported (next paragraph).
+
+**Why the CPU index is required.** The learned controllers train on the CPU (NFR-PERF-3), so no GPU libraries are needed. The PyPI wheel of torch 2.15.0 for Linux declares dependencies on `cuda-toolkit==13.2.2`, `nvidia-cudnn-cu13`, `nvidia-nccl-cu13`, `nvidia-nvshmem-cu13`, `nvidia-cusparselt-cu13`, `cuda-bindings` and `triton` (read from the PyPI metadata of 2026-11-19; the download size was not measured). The PyPI wheel for Windows has no such dependency. The PyTorch CPU index (`https://download.pytorch.org/whl/cpu`) serves `torch-2.15.0+cpu`, whose Linux wheel lists none of them. The local version tag `+cpu` sorts above `2.15.0`, so with `--extra-index-url` pip prefers it on both platforms, and the extra's `torch==2.15.0` accepts it (PEP 440). `pyproject.toml` cannot carry an index URL for pip, which is why the flag appears in the commands above, in the lock file and in CI.
+
+**`requirements-lock-marl.txt`.** It is an add-on to `requirements-lock.txt`, not a copy. It starts with the CPU index line and `-r requirements-lock.txt`, then pins `torch==2.15.0+cpu` and torch's eight dependencies (`filelock`, `fsspec`, `Jinja2`, `MarkupSafe`, `mpmath`, `networkx`, `setuptools`, `sympy`). The base lock stays free of PyTorch, and NumPy, SciPy and Hypothesis keep one source of truth. Because the index line applies to the whole pip invocation, `-e ".[marl]"` resolves to the pinned `2.15.0+cpu` and never to a second torch build.
+
+**CI.** The `tests` job installs `.[dev,marl]` with the CPU index and then runs `python -c "import torch; assert torch.version.cuda is None"`, which fails if a CUDA build was installed. The `quality` job keeps `.[dev]` until `src/robocoord/marl` imports torch. It then also needs `marl`, so that mypy resolves the torch types.
+
+**Verification status** (`verification-log.md` V-12). torch 2.15.0+cpu was installed and exercised on Windows 11 / Python 3.14.3 only. Linux and Python 3.12/3.13 were checked by dry-run resolution and wheel metadata, not by installation. The CI workflow with the new steps has not been run yet.
 
 ---
 
@@ -190,11 +217,21 @@ Each ADR is written once. Later issues reference it rather than re-deciding.
 - **Rationale.** The canonical multi-agent DQN form (Tampuu et al. 2017; Gupta et al. 2017). It is size-independent.
 - **Known limits.** Non-stationarity; no convergence guarantee (G16).
 - **Fallback.** VDN may be *added* if MADQL learns poorly in Issue #5. It never replaces this variant.
+- *Issue #5/#6 outcome:*
+  - MADQL completed fewer tasks than both non-learned controllers on validation block B (`05` §B.6).
+  - The student **deferred VDN** (2026-11-20): PPO is implemented and compared first, and VDN or other changes are revisited only if PPO is also unsatisfactory.
+  - VDN is not implemented.
 
 ### ADR-4: PPO variant
 
 - **Decision.** Shared stochastic actor. A centralised critic on $[o_i, \phi(s)]$ (MAPPO, Yu et al. 2022) or a local critic on $o_i$ (IPPO, de Witt et al. 2020), selected by a flag.
 - **Rationale.** CTDE: execution needs only local observations.
+- *Implemented in Issue #6* (`marl/ppo.py`, `marl/rollout.py`, `marl/ppo_trainer.py`):
+  - one PPO core;
+  - the `variant` flag (`mappo` | `ippo`) changes only the critic's input ($[o_i, \phi(s)]$, 615, or $o_i$, 356) and its width;
+  - actor and critic are each shared by all robots;
+  - no robot identity, so team sizes may vary.
+  - Details in `04` §7 notes.
 
 ### ADR-5: Auction allocator
 
@@ -235,6 +272,7 @@ The engine emits a JSON-Lines trace per step (positions, events, conflict sets, 
   - Committed: acquisition and preprocessing code, dataset **manifests** (`data/manifests/*.json`: source, licence, download date, file hashes, row counts, filters, parameters), attribution, and small **synthetic** test fixtures (`tests/fixtures/data/`) in each dataset's schema.
   - Redistribution of any derived data is considered only after verifying the dataset's licence and terms, and with the student's explicit approval.
 - **Results.** Runs, traces, figures and test reports go to `results/` (git-ignored). Curated summaries are recorded in the documentation.
+  - *Exception (post-Issue-6 research phase, 2026-11-20):* the curated overview figures in `results/figures/overview/` (`*.svg`, their `*.csv` table views, `SOURCES.md` and `index.html`, generated by `tools/figures/overview.py`) are tracked by Git through a narrow `.gitignore` exception. Everything else under `results/`, including the records the figures are computed from, stays git-ignored.
 - **Model checkpoints.** Final trained policies may be committed to `models/` if each file is **< 5 MB** and contains **inference-only weights** (actor or Q-network `state_dict`; no optimiser state, replay buffer or critic unless needed for evaluation). Each checkpoint has a JSON sidecar with:
   - algorithm and variant;
   - model, observation and reward specification versions;
@@ -325,6 +363,8 @@ class Coordinator(Protocol):
 
 `Controller.act(view, observations)` is the operational-level protocol. Known additive extension points, not defects: `WorldView` will gain the reference-path data needed by the RL observation (Issue #3/#5), and the shield (Issue #4) slots into the existing pipeline step 5.
 
+*Implemented in Issue #5:* `Engine(..., view_extras={"paths", "goal_distance"}, path_limit=L)` adds two opt-in fields to the view a controller acts on (and only to that view): `WorldView.reference_paths` (each robot's remaining reference path `c_ℓ, …, c_{ℓ+L}`, read through the optional coordinator protocol `PathReporting`, `None` without a valid plan) and `WorldView.goal_distance` (the capped static distance $\bar D(x_i, g_i)$, `None` when idle). They are off by default; requesting them has no side effect: traces and metrics are byte-identical with and without them (tested with A\* and RRT\*, `tests/integration/test_view_extras.py`). The engine itself gained no other API.
+
 ### 5.4 `planning`: constraints, procedure, A\*, RRT\*, monitor (Issue #3)
 
 ```python
@@ -370,7 +410,7 @@ class PathMonitor: ...                    # triggers T1–T8, rejoin, stall bloc
 - `planning/deadlock.py`, `DeadlockResolver` (T7): robot–robot wait-for cycles (`04` §5.5).
 - `planning/endpoint.py`, `EndpointRecovery` (T8): parking of idle robots on active task endpoints and retreat from a persistently held task goal (`04` §5.6).
 
-`AllocationCoordinator(..., deadlock=..., endpoint=...)` composes them: the resolver's overrides come first, endpoint recovery skips robots the resolver overrides, and both reach the monitor through `RobotInput(goal, detour, hold_stall, avoid, trigger, count_active)`. The CLI (`--deadlock`, `--endpoint`), the E5 executor (`fixed.endpoint`) and the benchmark set the system defaults; the bare constructor keeps both opt-in.
+`AllocationCoordinator(..., deadlock=..., endpoint=...)` composes them: the resolver's overrides come first, endpoint recovery skips robots the resolver overrides, and both reach the monitor through `RobotInput(goal, detour, hold_stall, avoid, trigger, count_active)`. The CLI (`--deadlock`, `--endpoint`), the `system_episode` experiment executor (`fixed.endpoint`) and the benchmark set the system defaults; the bare constructor keeps both opt-in.
 
 ### 5.5 `allocation` (Issue #4)
 
@@ -414,6 +454,23 @@ class Shield: def apply(self, view, proposal) -> tuple[dict[int, Action], list[S
 - `marl.env.MultiRobotEnv`, `observation`, `reward` (base + potential, model §7), `global_state`, `vector_env`.
 - `marl.madql`, `marl.ppo`, `networks`, `replay`, `rollout`, `trainer`, `checkpoint`.
 - `marl.policy.LearnedController`.
+- *Implemented in Issue #5* (PPO, `rollout` and the MAPPO critic remain for Issue #6):
+  - NumPy only, importable without the `marl` extra: `marl.config` (typed parameters), `observation` (model §6.1, 356 dimensions; built from the `WorldView` a controller acts on, so training and execution share one code path), `reward` (model §7), `global_state` (model §6.2, $4G^2+3$; built now, consumed in Issue #6), `env` (`MultiRobotEnv`: `reset(seed)`, `reset_spec(spec)`, `step(actions)`, `step_arrays(actions)`, `action_masks()`, `global_state()`), `vector_env` (`SyncVectorEnv`, auto-reset, different team sizes per copy), `replay`, `scenarios` (curriculum, validation levels and seed blocks), `evaluation`, `devcompare`.
+  - PyTorch: `networks`, `madql`, `trainer`, `checkpoint`, `policy`. No module imports torch at import time of the package.
+  - The environment drives the existing `Engine` (`prepare_step` / `apply_actions`) with the approved composition for learned controllers: auction, endpoint recovery on, deadlock resolver off, shield off; it never simulates anything itself. Termination (all delivered, no future release) takes precedence; truncation at the horizon $T$ uses a normal `prepare_step()` at time $T$ as a look-ahead (the engine runs with `max_steps = T + 1`), so the final observation, the last reward's potential and the episode metrics come from the same prepared state (`04` §8 notes).
+  - Policy actions are *requested* actions. The mask excludes only statically infeasible moves (`stay` is never masked); the optional shield and the always-on arbiter belong to the transition; replay stores the requested action.
+  - `LearnedController` (`madql`) implements the ordinary `Controller` protocol: greedy masked arg-max on the observation of the view, with no rule-based fallback. The engine must provide the view extras.
+- *Implemented in Issue #6* (additive; the Issue #5 behaviour is unchanged and regression-tested):
+  - `marl.rollout`: the padded `[T_r, E, N_max]` buffer, GAE and the collection loop (NumPy only).
+  - `marl.ppo`: the actor, the critic, the masked categorical, the loss and the update.
+  - `marl.ppo_trainer`: a separate PPO trainer with resume (D8, D9).
+  - `marl.pilot`: the RRT\*-in-training feasibility pilot.
+  - `marl.study`: the Issue #6 block-B experiments.
+  - `SyncVectorEnv(with_state=True)` returns the global states, including $\phi(s_T)$ of truncated copies captured before the auto-reset. The default (`False`) is the Issue #5 path.
+  - The checkpoint model-version table: `mlp-q-v1` (MADQL) and `mlp-pi-v1` (PPO actor).
+  - `LearnedController` also runs a PPO actor (controller `ppo`). It has an explicit `stochastic` evaluation mode; `greedy` stays the default.
+  - `marl.evaluation` adds the controllers `baseline-noresolver` (the matched baseline, D11) and `ppo`, and the allocator, mode and replicate fields.
+  - `marl.devcompare` adds the matched comparator, the absolute conflict metrics (D10) and the algorithm-level two-level bootstrap.
 
 ### 5.7 `experiments` (Issues #3, #4, #6, #8)
 
@@ -425,7 +482,7 @@ class Shield: def apply(self, view, proposal) -> tuple[dict[int, Action], list[S
 *Issue #3 implementation:* `experiments/spec.py` (TOML `ExperimentSpec`, Cartesian factors, labelled `[[planners]]`), `runner.py` (resumable, process pool, per-run cap recorded as `timeout`, exceptions recorded as `error`, `env.json`), `records.py` (append-only `records.jsonl`), `stats.py` (bootstrap CI, paired bootstrap, Holm, rank-biserial, log–log exponent fits; the Wilcoxon p-value arrives with SciPy in Issue #4), `planning_runs.py` (E1/E2 executors) and `analysis.py` (Markdown summaries). CLI: `python -m robocoord experiment --config configs/experiments/<name>.toml`. Plots are deferred to Issue #8.
 
 *Issue #4 implementation:*
-- `allocation_runs.py`: executors for the kinds `assignment` (E3a), `allocation_episode` (E3b) and `system_episode` (preliminary E5), with the paired instance generators `e3a_matrix`, `e3b_scenario` and `e5_scenario`.
+- `allocation_runs.py`: executors for the kinds `assignment` (E3a), `allocation_episode` (E3b) and `system_episode` (the Issue #4 non-learned system comparison, stored as `e5_*`), with the paired instance generators `e3a_matrix`, `e3b_scenario` and `e5_scenario` (a generator name, not an experiment label).
 - `allocation_analysis.py`: their summaries, registered in `analysis.SUMMARIES`.
 - `stats.wilcoxon_p`: SciPy, imported lazily.
 - `perf.py`: the NFR-PERF-1 benchmark, `python -m robocoord.experiments.perf --out results/perf`.
@@ -460,10 +517,17 @@ ALLOCATORS: {"auction": AuctionAllocator, "sequential": SequentialAuctionAllocat
 CONTROLLERS: {
     "baseline": BaselineController,
     "reference": ReferenceFollower,
-    "madql": LearnedController.from_madql,
+    "madql": LearnedController.from_checkpoint,  # implemented in Issue #5
     "ppo": LearnedController.from_ppo,
 }
 ```
+
+*Issue #5:* the CLI selects the learned controller with `simulate --planner astar|rrtstar --allocator … --controller madql --checkpoint FILE.pt [--shield off|predictive]` and trains with `train --config configs/training/madql.toml --seed N --out DIR`.
+
+*Issue #6:*
+- `simulate … --controller ppo --checkpoint FILE.pt` selects a PPO actor; a checkpoint of the other algorithm is refused (exit code 2). The registry entry is `"ppo": LearnedController.from_checkpoint`; the planned name `from_ppo` was not needed.
+- `train` runs PPO for a configuration with a `[ppo]` table (`configs/training/{mappo,ippo}.toml`). `train … --resume` continues a PPO run from its latest training checkpoint (D8).
+- All 16 planner × allocator × controller combinations are covered by X-4 (`tests/integration/test_x4_matrix.py`).
 
 Each factory takes its typed config section (e.g. `[planner.rrtstar] max_iterations = 2000`, `neighbor_index = "kdtree"`). The same names are used by the CLI, viewer and experiment specs. Unknown names fail at load time with the valid choices listed.
 
@@ -488,6 +552,20 @@ The shield is **off** during training, so policies receive the conflict signal d
 **Planner inside training.** The default is A\* (deterministic, cheap). Training with RRT\* inside the environment happens if the budget allows (decided in Issue #6). Otherwise A\*-trained policies are evaluated **cross-planner** with RRT\* guidance. This is valid because the observation's suggested-action interface and the shaping potential are planner-agnostic. The choice is reported explicitly.
 
 **Evaluation** uses held-out test seeds and, from Issue #7, data-driven scenario families (out-of-distribution test).
+
+**As implemented in Issue #5** (`marl/trainer.py`, `marl/scenarios.py`, `configs/training/madql.toml`):
+- Training scenario seeds 0–9 999 are consumed in one fixed order that is identical for every run; the stage active at the episode's start chooses the distribution. The algorithm's streams (`explore`, `replay`, `torch`) derive from the run seed only. Run seeds 1, 2 and 3; deterministic algorithms and one intra-op thread.
+- Curriculum (shares of the step budget): stage 1 (20 %) static, 2–4 robots, 16×16, horizon 200; stage 2 (30 %) moving obstacles {2, 4}, 2–4 robots, 16×16 or 24×24, horizon 300; stage 3 (50 %) full dynamics, 4–8 robots (8 in a third of the episodes), 24×24 or 32×32 (32 in two thirds), obstacles {4, 8}, horizon 400; densities {0.10, 0.15, 0.20} throughout. All instances come from the existing `e5_scenario` generator.
+- **Planner inside training:** A\* only for the initial MADQL training. RRT\* in the loop was deferred because of its prohibitively high measured cost under the tested exploratory configuration (uniform masked random actions, 8 robots: about 717 ms per step against 1.9 ms for A\*; a design-phase measurement whose output was not stored, see verification log V-17, where the Issue #6 pilot replaces it as the recorded evidence). The same learned policy is validated and compared with both planners.
+- Validation block A (seeds 10 000–10 019): every 50 000 environment steps and at the end, 60 A\* episodes (20 seeds × static / obstacles / full; 32×32, density 0.15, 8 robots, 16 tasks, horizon 400). Checkpoint selection is lexicographic: overall task completion, then mean discounted base return (shaping excluded). RRT\* ($n_{\max}$ = 1 000) on 10 full-dynamics seeds every 250 000 steps and at the end, reported only.
+- Development comparison on validation block B (10 020–10 099) after configuration freeze (`marl/devcompare.py`); never used for selection or tuning. Test seeds 20 000–20 999 are not used in Issue #5.
+
+**As implemented in Issue #6** (`marl/ppo_trainer.py`, `configs/training/{mappo,ippo}.toml`):
+- **Shared with MADQL:** the composition, observation (`obs-v1`), default reward (`reward-v1`), curriculum and scenario order (sampler seed 0), and the 1 000 000-environment-step budget (one step = one joint step of one copy; robot-steps are reported separately).
+- **Same as MADQL:** block-A validation every 50 000 steps, the selection rule, RRT\* monitoring every 250 000 steps, and run seeds 1, 2, 3.
+- **Scenario order wraps around.** PPO finishes episodes far faster than MADQL did, so the 10 000 training seeds can run out within the budget. The fixed order then starts again from its beginning; every wrap is logged. This was found and fixed after the first launch, about 5 minutes in; the aborted runs are kept in `results/training/_aborted_issue6_seedpool/`. The MADQL trainer is unchanged and never reached the limit. No Issue #6 run actually wrapped: the 14 runs used 0.938–0.992 of one pass (V-18).
+- **Planner inside training:** A\* only. The RRT\* feasibility pilot (`marl/pilot.py`, verification log V-17) projected 36.3 h per 1 M-step run with the untrained actor (above the 24 h threshold of D7) and 5.9 h with reference-follower actions (below it). The approved rule classifies this as **borderline**: RRT\* training is not added without the student's decision, and RRT\* is evaluated cross-planner as for MADQL.
+- **Resume** happens at validation points and is not bitwise identical (D8; `04` §7 notes).
 
 ---
 
@@ -524,10 +602,12 @@ Directories are created **in the issue that first needs them**, never empty in a
 ├── README.md                     # final version written in Issue #8
 ├── pyproject.toml                # Issue #2
 ├── requirements-lock.txt         # Issue #2
+├── requirements-lock-marl.txt    # Issue #5 (MARL add-on to the base lock, §3.4)
 ├── .gitignore
 ├── .github/workflows/tests.yml   # Issue #2 (CI, §3.3)
 ├── docs/                         # README.md (index), 01–07, verification-log.md
-├── configs/  scenarios/ (#2+) · experiments/ (#3+) · training/ (#5+)
+├── configs/  scenarios/ (#2+) · experiments/ (#3+) · training/ (#5+: madql.toml, madql_smoke.toml;
+│             #6: mappo.toml, ippo.toml, ppo_smoke.toml, mappo_{zeta0,beta0,crr05,crr2}.toml)
 ├── src/robocoord/
 │   ├── __init__.py, __main__.py, cli.py
 │   ├── core/          types.py, grid.py, distance.py, mapio.py, rng.py                 (#2)
@@ -539,9 +619,10 @@ Directories are created **in the issue that first needs them**, never empty in a
 │   │                  geometry.py, kdtree.py, neighbors.py, monitor.py                   (#3)
 │   ├── allocation/    base.py, benefits.py, auction.py, sequential.py                   (#4)
 │   ├── control/       base.py, reference.py, baseline.py, shield.py                     (#4)
-│   ├── marl/          env.py, observation.py, reward.py, global_state.py, vector_env.py,
-│   │                  networks.py, replay.py, rollout.py, madql.py, ppo.py,
-│   │                  trainer.py, policy.py, checkpoint.py                               (#5–#6)
+│   ├── marl/          config.py, observation.py, reward.py, global_state.py, env.py,
+│   │                  vector_env.py, replay.py, scenarios.py, evaluation.py, devcompare.py,
+│   │                  networks.py, madql.py, trainer.py, checkpoint.py, policy.py         (#5)
+│   │                  rollout.py, ppo.py, ppo_trainer.py, pilot.py, study.py             (#6)
 │   ├── data/          olist.py, nyc_taxi.py, mazes.py, trajectories.py, mapping.py      (#7)
 │   ├── experiments/   spec.py, runner.py, records.py, stats.py, plots.py                (#3+)
 │   └── viz/           app.py, drawing.py, hud.py                                        (#8)

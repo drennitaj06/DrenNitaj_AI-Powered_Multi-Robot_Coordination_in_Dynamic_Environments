@@ -1,0 +1,6 @@
+# Analysis tools outside the package (post-Issue-6 overview figures). Same rules as the project,
+# except the line length: the figure scripts embed long SVG markup strings.
+extend = "../pyproject.toml"
+
+[lint]
+extend-ignore = ["E501"]

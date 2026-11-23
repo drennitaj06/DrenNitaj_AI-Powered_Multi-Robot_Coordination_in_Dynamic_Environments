@@ -112,7 +112,7 @@ Note on `target` for staying robots: a robot with $a_i = \textsf{stay}$ is liste
 - *Symmetric reuse.* $D_t(a,b) = D_t(b,a)$. `distance(a, b)` reuses a cached field to $a$ when none to $b$ is cached, and the auction benefits read the leg $D(p_j, d_j)$ as $D(d_j, p_j)$, from the field to $p_j$ that the terms $D(x_i, p_j)$ need anyway: one field per task instead of two on a cold cache.
 - *Invalidation.* Fields, neighbour lists and labels are all keyed by the grid version, which every map event changes, so nothing computed for an older map is ever used.
 - *Not done:* no work was moved into engine construction or out of the timed step, and O3 (incremental field repair after a single-cell map event) was not implemented; see `05` §B.6 NFR-PERF-1 for why.
-- *Equivalence tests* (`tests/unit/core/test_distance_equivalence.py`): flat BFS = legacy BFS for every target (blocked ones included) and flat labels = legacy labels on 80 random grids up to 9×9; fast and legacy oracles agree on fields, distances and reachability before and after random block/unblock sequences (50 grids); the E5 maps and task fields are identical under both. `DistanceOracle(grid, legacy=True)` / `legacy_distance()` reproduces the earlier behaviour exactly and exists only for these tests and the paired before/after benchmark.
+- *Equivalence tests* (`tests/unit/core/test_distance_equivalence.py`): flat BFS = legacy BFS for every target (blocked ones included) and flat labels = legacy labels on 80 random grids up to 9×9; fast and legacy oracles agree on fields, distances and reachability before and after random block/unblock sequences (50 grids); the `e5_scenario` maps and task fields are identical under both. `DistanceOracle(grid, legacy=True)` / `legacy_distance()` reproduces the earlier behaviour exactly and exists only for these tests and the paired before/after benchmark.
 
 ### 2.2 Shared planning constraints and procedure
 
@@ -348,6 +348,21 @@ start = goal (immediate success); start inside the goal region; goal unreachable
 - **Steer step $\eta = 2.0$ cells** (configurable). The documents left $\eta$ open. It was fixed by a small pilot on micro-benchmark seeds 39000–39009 (32×32 maps; open, 20 %, 30 % density and rooms; 2 000 iterations; $\eta \in \{1, 1.5, 2, 3\}$). $\eta = 2$ gave the best balance of success within budget (39/40 queries) and path quality. $\eta = 1$ lost success on 30 % maps (7/10); $\eta = 3$ lost success on 30 % and rooms maps (7/10, 8/10). Sampling: goal bias $p_g = 0.1$ (uniform in the goal cell), otherwise uniform in $[0,W)\times[0,H)$; $\gamma_f = 1.5$; $\mu(X_{\text{free}})$ = free cells w.r.t. $S(t) \cup B_i$.
 - **Consequence for the near radius.** With $\eta = 2$, $r_n = \min(\gamma\sqrt{\ln n / n}, \eta)$ equals $\eta$ until $\gamma\sqrt{\ln n/n} < 2$, i.e. until $n \approx 10\,150$ on 32×32, $n \approx 47\,400$ on 64×64 and $n \approx 216\,000$ on 128×128 open maps. Below that, the expected near-set size $n\pi\eta^2/\mu$ grows **linearly** in $n$. Once the radius shrinks, $k \approx n\pi r_n^2/\mu = 6\gamma_f^2\ln n \approx 13.5\ln n$ under uniform density. Assumption U therefore describes the asymptotic regime only; E1 measures which regime the online budgets fall in.
 - RRT\* runs its full iteration budget (anytime). `stop_on_first_solution` (off by default) is used only by the X-11 consistency test. `time_limit_s` is the per-run wall-clock cap of the experiments.
+- **Budget control (Issue 6A P2; both off by default, `None`).** Two deterministic stopping rules:
+  - `refine_iterations = k`: stop after iteration $i_1 + k$, where $i_1$ is the first iteration with a solution;
+  - `patience = m`: stop once $m$ iterations have passed since the last strict decrease of the best goal cost, counted from $i_1$.
+
+  Both apply only after a solution exists and only end the loop. If both are set, the first to trigger stops the run.
+  - **Exact prefix.** A stopped run is an exact prefix of the full-budget run on the same query and random stream: the same samples, tree and best-cost history up to the stop.
+  - **Restated guarantees:**
+    - G5 still holds: the returned path is valid for the snapshot, the best cost is non-increasing and the tree invariant is exact.
+    - The returned cost equals the full run's best cost at the stop iteration, so it is never below the full-budget cost and never above the first-solution cost.
+    - Success and failure are unchanged for the same budget: a query without a solution runs the whole budget and returns `budget_exhausted`.
+    - The procedure, the BFS guard and the fallback are unchanged.
+    - Per-call streams are keyed by `(t, robot)`, so stopping one call early does not change any other call.
+  - **Effect on G7–G8.** With a rule set, RRT\* is no longer anytime, so the finite-budget convergence of E1c does not apply to its output. G7 and G8 remain not claimed.
+  - **Tests:** `tests/unit/planning/test_rrtstar_budget.py` (prefix property over random queries, edge cases, off ⇒ identical) and `tests/integration/test_rrt_budget_integration.py`.
+  - **Development evaluation and adoption decision:** `docs/research/2026-11-22-issue-6a-phase2-rrt-budget.md`.
 - **Index invariants and oracle tests:** k-d tree and brute force returned identical nearest and radius results on Hypothesis-generated insert/query sequences, including snapped coordinates with many exact ties and duplicates, and identical $k'$ totals. Slot sizes equal the binary representation of $n$. Every point is in exactly one slot. Static trees satisfy the alternating axes, the median property, tight bounding boxes, leaf size and depth ≤ $\lceil\log_2(m/b_\ell)\rceil + 1$. Because both indexes answer identically, RRT\* builds the **same tree** with either index for a given seed. This is tested, and E1b confirms it on every query.
 - **Default neighbour index: `brute` (decided from E1b, `05` §B.6).** At every measured budget (1 000–10 000 iterations; 64×64 open and 20 % maps) the brute-force index was faster, by a factor of 1.2–2.1 in median time across the original run and the counter-corrected re-run, and used about 25 % less memory. The k-d tree evaluates 7–130× fewer distances per nearest-neighbour query, examines only 16–54 tree nodes, and has the lower time exponent, but its pure-Python traversal costs more than one vectorised NumPy scan of ≤ 10 000 points. `kdtree` remains implemented, tested and selectable. **Every complexity statement for the default configuration therefore refers to `BruteForceIndex`.**
 - **Work counters (definitions in `planning/kdtree.py`, pinned by regression tests):**
@@ -678,13 +693,13 @@ Here $\tilde\pi$ is the effective priority of the carried or assigned task, with
   3. *Idle robots never move aside* (no parking in the controller; endpoint recovery, §5.6, adds parking for active endpoints). An idle robot on a corridor or on another robot's goal blocks it until T4 finds a detour, if one exists.
      - An idle robot *on the goal cell* blocks that task for good: T4 never targets the goal, and the occupied-goal policy is to wait.
      - The deadlock resolver (§5.5) does not detect this: an idle robot has no plan, so it forms no wait-for cycle.
-     - Measured in the preliminary E5 (`05` §B.6): 28 of the baseline's 91 undelivered tasks.
+     - Measured in the Issue #4 system comparison (`05` §B.6): 28 of the baseline's 91 undelivered tasks.
      - *Addressed by endpoint recovery (§5.6)* for an idle robot on an active task endpoint (parking). An idle robot on a corridor cell that is no endpoint is still not moved.
   4. *$\textsf{ROv}$ from unpredicted obstacle moves:* 1–2 per episode in 4 of the 20 demo runs.
   5. *Waiting costs throughput.* In `planning_detour` (A\*, auction) the baseline delivers 1/2 in 80 steps, against 2/2 for the follower, which relied on 12 conflicts cancelled by the arbiter.
   6. *Robot–obstacle goal deadlock* (added after the Project Issue #4 audit; the same mechanism as E2 cause 2). A moving obstacle on the robot's goal whose next move is the robot's own cell never moves: obstacles never enter robot cells (model §2). The robot waits in front of it (`obstacle_ahead`), as the occupied-goal policy of model §5.3 prescribes. Neither moves again.
      - Neither the baseline nor the deadlock resolver handles this: it is not a robot–robot cycle.
-     - Measured in the preliminary E5: 61 of the baseline's 91 undelivered tasks (54 with patrol obstacles, 7 with random-walk obstacles).
+     - Measured in the Issue #4 system comparison: 61 of the baseline's 91 undelivered tasks (54 with patrol obstacles, 7 with random-walk obstacles).
      - *Addressed by endpoint recovery (§5.6)*, the robot-side retreat; obstacle motion (A-5) is unchanged. With `--endpoint off` the limitation is as described here.
 - **Tests.**
   - `tests/unit/control/test_baseline.py`: each rule on hand-built views (mask, occupied, predicted, sensing radius); vertex conflicts by priority, by id and idle-lowest; aging breaking equal levels; 3 and 4 robots competing for one cell; swap and 4-cycle; conservative following; statistics; validation.
@@ -764,7 +779,7 @@ SHIELD(a_i):  c ← x_i + Δ(a_i)
 4. *Release policy.* An `unreachable` result of a *detour* plan does not trigger the model §5.3 task release (it aborts the detour instead). Otherwise the yielder would lose its task.
 5. *Trace stability.* `T7` appears in `calls_by_trigger` only when the resolver is enabled. With the resolver off, traces of 46 configurations are byte-identical to the pre-5B snapshot.
 
-**Safety (G21, checked against the code).** The stage 5A proof (§5.3 notes) uses only the controller's rules 1–6, occupancy and predictions at $t$, and the single winner per contested cell. It holds for *arbitrary* suggested actions; the property tests draw them at random. The resolver changes only monitor goals, hence only suggestions, and never an action. So, under assumptions (a)–(c) of §5.3, the joint proposal still has no RR, ROs or invalid move, and none at all under (c). No assumption is added or weakened for safety. In tests: 0 RR / ROs / INV with the resolver on in every demo scenario × planner × allocator, and in all 600 preliminary-E5 episodes.
+**Safety (G21, checked against the code).** The stage 5A proof (§5.3 notes) uses only the controller's rules 1–6, occupancy and predictions at $t$, and the single winner per contested cell. It holds for *arbitrary* suggested actions; the property tests draw them at random. The resolver changes only monitor goals, hence only suggestions, and never an action. So, under assumptions (a)–(c) of §5.3, the joint proposal still has no RR, ROs or invalid move, and none at all under (c). No assumption is added or weakened for safety. In tests: 0 RR / ROs / INV with the resolver on in every demo scenario × planner × allocator, and in all 600 Issue #4 system-comparison episodes.
 
 **Progress (G22, conditional; two robots only).** Re-examined against the code in the Project Issue #4 audit; R7–R9 were implicit before and are now stated.
 
@@ -790,7 +805,7 @@ The claim: a *detected* deadlock of exactly two robots is resolved in finitely m
   - a robot waiting for a dynamic obstacle on its goal (the robot–obstacle goal deadlock, limitation 6 of §5.3);
   - a chain ending at a robot that waits for an obstacle.
 
-  So `unresolved_at_end` counts only unresolved robot–robot cycles. It is **not** a count of stuck robots: the preliminary E5 had 0 unresolved cycles but 89 tasks stuck on idle robots or obstacles (`05` §B.6).
+  So `unresolved_at_end` counts only unresolved robot–robot cycles. It is **not** a count of stuck robots: the Issue #4 system comparison had 0 unresolved cycles but 89 tasks stuck on idle robots or obstacles (`05` §B.6).
   The first two cases, when the blocked cell is the robot's *task goal*, are handled by endpoint recovery (§5.6), which reports its own unresolved cases.
 - **Cases it cannot resolve (by design or by construction):**
   - (i) head-on encounters with no cell off the other robot's path, e.g. a single lane with goals at both ends: `no_passing_place`;
@@ -826,14 +841,14 @@ The claim: a *detected* deadlock of exactly two robots is resolved in finitely m
 
 ### 5.6 Endpoint recovery: idle-robot parking and retreat from a held goal (Project Issue #4 follow-up)
 
-**Why.** The preliminary E5 traced 89 of the baseline's 91 undelivered tasks to a task goal held *permanently* (`05` §B.6):
+**Why.** The Issue #4 system comparison traced 89 of the baseline's 91 undelivered tasks to a task goal held *permanently* (`05` §B.6):
 - **Robot–obstacle goal deadlock (61 tasks).** An obstacle stands on the goal, and its next move is the cell of the robot waiting next to it. In 54 cases this was a patrol obstacle, whose shortest-path step is fixed; in 7 cases a random walk on a dead-end goal whose only exit was the robot. Obstacles never enter robot cells (A-5), and the robot waits for its goal (model §5.3), so neither moves again.
 - **Idle robot on the goal (28 tasks).** A robot that delivered there, or stopped there for another reason, stays forever: there is no parking.
 
 The planner was correct: the goal is never dynamically blocked (`constraints.py`, model §5.2). Model §5.2 called an obstacle on a goal "transient", but nothing in the model made it so. That was a specification gap, now closed by a robot-side rule. Obstacle motion (A-5) is unchanged.
 
 **Placement.** `planning/endpoint.py`, `EndpointRecovery(EndpointParams)`, used by `AllocationCoordinator(..., endpoint=EndpointParams())`.
-- *Defaults:* on in the CLI with an allocator, for every controller (`--endpoint off` disables it), in the benchmark workloads, and in the recovery E5 configurations.
+- *Defaults:* on in the CLI with an allocator, for every controller (`--endpoint off` disables it), in the benchmark workloads, and in the recovery configurations of the Issue #4 system comparison (`e5_recovery*.toml`).
 - *Opt-in constructor:* the bare constructor keeps it off, as with `deadlock=`, so that the stage-level tests keep pinning each stage's exact behaviour.
 - *Mechanism:* like the resolver, it never chooses actions. It replaces the goal given to the path monitor by a temporary cell; this goal change is trigger **T8**, the current leg is not split, and the task goal is restored with T8.
 - *Composition:* the resolver has precedence. A robot the resolver overrides is not in endpoint recovery, and its retreat or parking is cancelled. Resolver passing cells count as reserved cells here.
@@ -893,14 +908,14 @@ The planner was correct: the goal is never dynamically blocked (`constraints.py`
 | `unresolved_obstacle_at_end`, `unresolved_idle_robot_at_end` | persistent blockages still in place when the episode ends |
 | `idle_on_endpoint_at_end` | idle robots standing on an active endpoint at the end |
 
-The E5 diagnostics (`experiments/e5_diagnostics.py`) attach the holder's recovery state to every undelivered `goal_obstacle` / `goal_idle_robot` item. For `goal_idle_robot` items they also attach the occupant's parking state. No undelivered task is left without its recovery outcome.
+The diagnostics of the Issue #4 system comparison (`experiments/e5_diagnostics.py`) attach the holder's recovery state to every undelivered `goal_obstacle` / `goal_idle_robot` item. For `goal_idle_robot` items they also attach the occupant's parking state. No undelivered task is left without its recovery outcome.
 
 **Safety (G25, guaranteed, argued against the code).**
 - Endpoint recovery changes only monitor goals, and therefore only suggested actions. It never changes an action, the occupancy rules, the arbiter or obstacle motion.
 - The arbiter's Lemma 3.1 holds for any joint proposal, so no physical collision is possible.
 - The baseline's collision property (G19, §5.3) holds for *arbitrary* suggested actions, so with the baseline there are still no RR, ROs or invalid proposals under its assumptions.
 - The shield, when on, still only replaces moves by `stay`.
-- *Tested:* 0 physical collisions in every endpoint test; 0 RR/ROs/INV for the baseline in every planner × allocator × shield combination of `tests/integration/test_endpoint_integration.py` and `test_cli_matrix.py`; the E5 recovery runs (`05` §B.6).
+- *Tested:* 0 physical collisions in every endpoint test; 0 RR/ROs/INV for the baseline in every planner × allocator × shield combination of `tests/integration/test_endpoint_integration.py` and `test_cli_matrix.py`; the recovery runs of the Issue #4 system comparison (`05` §B.6).
 
 **Progress (not claimed in general; conditional for the simplest cases).**
 - *Parking:* an idle robot leaves an active endpoint if a safe cell exists and its route is not blocked. Its priority is 0, so busy robots pass first.
@@ -923,9 +938,9 @@ The E5 diagnostics (`experiments/e5_diagnostics.py`) attach the holder's recover
   - *Parking:* nearest safe cell, completion, cancellation, abort and retry, static and dynamic absence, stationary robots and reserved cells.
   - *Retreat:* temporary vs persistent occupancy, the expected retreat cell, success and restore (T8), timeouts, exhaustion and the end report, no retreat cell, cancellation (goal change, resolver), abort, an idle-robot occupant.
   - Counter keys and events; parking robot-steps excluded from the deviation-rate denominator (`count_active`).
-- `tests/integration/test_endpoint_integration.py` (31): endpoint reuse after delivery (both controllers; off → `goal_idle_robot`, on → delivered and parked); shared endpoints between tasks; identical pickup/drop-off rejected by the model; no parking and no retreat cell reported; a patrol held on a pickup and on a drop-off (off → `goal_obstacle`, on → retreat succeeds, delivered); a crossing obstacle cleared without recovery; a never-leaving obstacle exhausted and reported; all planner × allocator × controller × shield combinations; E5 development-seed episodes (both controllers, shield off and on): no collision, baseline RR = 0, counter identities; off = the earlier coordinator; determinism with RRT\*.
+- `tests/integration/test_endpoint_integration.py` (31): endpoint reuse after delivery (both controllers; off → `goal_idle_robot`, on → delivered and parked); shared endpoints between tasks; identical pickup/drop-off rejected by the model; no parking and no retreat cell reported; a patrol held on a pickup and on a drop-off (off → `goal_obstacle`, on → retreat succeeds, delivered); a crossing obstacle cleared without recovery; a never-leaving obstacle exhausted and reported; all planner × allocator × controller × shield combinations; `e5_scenario` development-seed episodes (both controllers, shield off and on): no collision, baseline RR = 0, counter identities; off = the earlier coordinator; determinism with RRT\*.
 - `tests/integration/test_cli_matrix.py`: the 16 combinations with `--endpoint` on and off; option validation and text output.
-- `tests/integration/test_endpoint_evidence.py` (7, one slow): the paired benchmark (identical trajectories, statistics, CLI validation, samples), the recovery E5 configurations, the paired recovery comparison, recovery-aware diagnostics.
+- `tests/integration/test_endpoint_evidence.py` (7, one slow): the paired benchmark (identical trajectories, statistics, CLI validation, samples), the recovery configurations (`e5_recovery*.toml`), the paired recovery comparison, recovery-aware diagnostics.
 
 **Metric definitions with recovery.** Unchanged. Their measured values can move as follows:
 - `robot_moves` and path efficiency include retreat and parking moves; a retreat, like a T7 detour, stays inside its leg.
@@ -986,6 +1001,14 @@ The stored action is the controller's raw choice. If the shield is on and replac
 5. Masked ε-greedy never selects masked actions (property test).
 6. Short end-to-end training improves validation return over a random policy on a 2-robot 6×6 scenario, by a statistical check across seeds. Only this *sanity* claim is tested; performance claims come from experiments.
 
+**Implementation notes (Issue #5).**
+- `marl/madql.py`, `networks.py`, `replay.py`, `trainer.py`. The MLP has 158 469 parameters. Masked arg-max resolves ties to the lowest action index; masked ε-greedy draws uniformly over the *allowed* actions (D5).
+- **Final hyper-parameters** = the initial values above, unchanged: lr 5e-4, batch 256, replay 200 k, warm-up 10 k stored transitions, train_freq 4 and target_period 2 000 *environment steps summed over the copies* (D3), $\gamma$ 0.99, ε 1.0 → 0.05 over 30 % of training, Huber loss, Adam, gradient-norm clip 10; $E$ = 4 copies. No hyper-parameter was tuned.
+- **Replay layout:** window channels as `uint8` (the priority channel stores the level $\pi$), scalars as `float32`; the codec restores observations exactly (tested). About 0.8 kB per transition, ≈ 160 MB for 200 k (< 300 MB, tested).
+- **Stored action:** the requested action $a^{\text{ctrl}}$, also when the shield or the arbiter changed or cancelled it, because the shield and the arbiter are part of the transition the learned values describe.
+- **Step budget:** 1 000 000 environment steps per run, fixed from the measured throughput of this trainer (verification log V-14).
+- **Tests:** `tests/unit/marl/test_madql.py` (tests 1–5; test 5 is a Hypothesis property test), `tests/integration/test_marl_learning_sanity.py` (test 6, marked `training`), `tests/integration/test_marl_training.py` (X-7, reproducibility, X-1 with a learned controller).
+
 ---
 
 ## 7. PPO: multi-agent PPO (MAPPO / IPPO)
@@ -1045,6 +1068,57 @@ $$
 5. The MAPPO/IPPO switch changes only the critic input.
 6. Short end-to-end improvement check, as for MADQL.
 
+**Implementation notes (Issue #6).**
+- **Modules:**
+  - `marl/rollout.py` (NumPy only): padded `[T_r, E, N_max]` buffer, GAE and the collection loop;
+  - `marl/ppo.py`: actor, critic, masked categorical, loss and update;
+  - `marl/ppo_trainer.py`: a separate trainer; the MADQL trainer is unchanged (D9);
+  - `configs/training/{mappo,ippo,ppo_smoke}.toml` and the reward-ablation configurations `mappo_{zeta0,beta0,crr05,crr2}.toml`.
+- **Actor:**
+  - $356 \to 256 \to 256 \to 5$ (158 469 parameters), shared by all robots, with no robot identity;
+  - orthogonal initialisation (hidden gain √2, output gain 0.01);
+  - masked actions get the logit `finfo.min`; the entropy is summed over allowed actions only;
+  - actions are sampled by inverse CDF from the float64 masked softmax with the run's `sample` stream; the stored log-probability is computed by the same function the update uses.
+- **Critic:**
+  - shared by all robots (orthogonal, output gain 1);
+  - MAPPO: $[o_i, \phi(s)]$, 615 inputs, 223 745 parameters; $\phi(s)$ includes $t/T$;
+  - IPPO: $o_i$, 356 inputs, 157 441 parameters;
+  - the switch changes only the critic input and width; with the same seed both variants initialise identical actors (tested).
+- **Rollout:** $E = 8$, $T_r = 125$, so 1 000 environment steps per iteration (D4; the documented 128 would not divide the 50 000-step validation interval). Robot slots beyond a copy's team size are invalid and excluded from every loss.
+- **GAE** per (copy, slot) stream with $\gamma = 0.99$, $\lambda = 0.95$:
+  - $V_\text{next} = 0$ after termination;
+  - $V_\text{next} = V(\text{final observation}, \phi(s_T))$ after truncation, captured before the auto-reset (`SyncVectorEnv(with_state=True)`; tests R1–R6);
+  - otherwise the next value of the same stream;
+  - the recursion stops at termination **and** truncation, so it never crosses an auto-reset.
+- **Update:**
+  - $K = 4$ epochs × 4 shuffled minibatches;
+  - advantages normalised per minibatch;
+  - $\epsilon_c = 0.2$, $c_v = 0.5$ (MSE, no value clipping), $c_e = 0.01$;
+  - Adam with lr 3e-4 and eps 1e-5 (one optimiser, actor and critic parameter groups);
+  - gradient norms clipped to 0.5 **separately** for actor and critic (D5), so a critic loss of any scale leaves the actor's update unchanged (tested);
+  - the iteration stops early once a minibatch's approximate KL $\mathbb{E}[(\rho - 1) - \log\rho]$ exceeds 0.02;
+  - no learning-rate annealing.
+- **Determinism:**
+  - streams `sample`, `shuffle` and `torch` come from `SeedSequence(run_seed)`;
+  - the scenario order is the fixed training order (sampler seed 0), as for MADQL;
+  - deterministic torch with one thread;
+  - the same configuration and seed give byte-identical checkpoints and logs, timings excepted (tested).
+- **Checkpoints:**
+  - inference export is the actor only, model specification `mlp-pi-v1`, next to `mlp-q-v1` in an additive version table;
+  - the sidecar adds the variant, `evaluation_mode = greedy` and the critic specification (`included: false`);
+  - training checkpoints `*.train.pt` hold actor, critic, optimiser, iteration, environment and robot steps, the scenario position, the NumPy and torch random states and the best selection so far.
+- **Resume (D8):** at the latest validation point only. The episodes in progress there are discarded and restart from the next scenario seeds of the fixed order, so a resumed run is **not bitwise identical** to an uninterrupted one. The interrupted attempt's later log records are moved to `*.pre_resume_<n>.jsonl`, and the resume is recorded in the log and the summary (tested).
+- **Learned controller:** the PPO actor runs through the existing `LearnedController` (masked arg-max = the policy's mode). Stochastic execution is an explicit evaluation mode, never the default: PPO samples from the masked policy, MADQL uses masked ε-greedy with ε = 0.05.
+- **Tests:**
+  - `tests/unit/marl/test_rollout.py` (test 1);
+  - `test_ppo.py` (tests 2, 3, 5, separate clipping, determinism);
+  - `test_ppo_sanity.py` (test 4: a masked bandit and the chain MDP, both variants);
+  - `tests/integration/test_ppo_rollout.py` (R1–R6);
+  - `test_ppo_training.py` (X-7, reproducibility, resume, CLI);
+  - `test_ppo_learning_sanity.py` (test 6, marked `training`);
+  - `tests/e2e/test_ppo_subprocess.py`;
+  - `tests/integration/test_x4_matrix.py` (X-4).
+
 ---
 
 ## 8. Observations and rewards
@@ -1069,6 +1143,13 @@ $$
    - The team-mixed shaping term equals the shaping of $\Psi_i$.
    - Capped distance when the goal becomes statically unreachable.
 4. Observation size is independent of $N$ and the map.
+
+**Implementation notes (Issue #5; `marl/observation.py`, `reward.py`, `env.py`).**
+- Observation: $r = 3$, $L_o = 6$ path cells after the robot's own cell, $P = 3$. Channel 2 holds the constant-velocity prediction $z + v$ of every obstacle sensed in the window, kept only if it is a free in-bounds cell inside the window (as `planning.constraints.sense`; $v = 0$ predicts the current cell). Channel 4 and the own-priority scalar use the base level $\pi / P$ (D4), not the aged weight the baseline uses. Out-of-bounds cells read as static obstacles. Without a planner the suggested-action one-hot is all zero.
+- Rewards attribute robot–robot and robot–obstacle conflicts through `ConflictEvent.at_fault` of the proposal reaching the arbiter (a robot that stayed is not at fault in a vertex conflict; both robots are at fault in a swap); invalid moves cannot occur under the mask. Idle robots pay no step cost and have $\Phi = 0$, so a waiting idle robot's own reward is exactly 0.
+- Episode end: termination takes precedence; truncation at $T$ performs the normal preparation of time $T$ (events, arrivals, allocation, replanning) without acting, and the final observation, $\Phi(s_T)$ and the episode metrics come from that state. Training-episode metrics can therefore differ from an `Engine(max_steps = T)` run only in the counts this preparation adds (tasks released at $T$, planning counters). Validation and development comparisons run every controller on the plain engine.
+- **Closed forms asserted by the tests** (`tests/unit/marl/test_reward.py`): the net discounted return of a $k$-step cycle is $(1-\gamma^k)\big(\zeta\Lambda/(W+H) - c_{\text{step}}/(1-\gamma)\big)$, i.e. $(1-\gamma^k)(\zeta\Lambda/(W+H) - 1)$ at the defaults, positive exactly when $\Lambda > (W+H)/\zeta$; a progress move beats `stay` by $\zeta\gamma/(W+H)$; finishing beats staying, and so does progress truncated before finishing. These are accounting identities; for terminating episodes the policy-invariance argument of model §7.1 applies, for truncated episodes it does not.
+- Shaping spikes (capped distances when a goal becomes unreachable, assignment jumps) are not clipped; training logs record the maximum $|F|$ and the number of robot-steps with $|F| > 1$ per episode.
 
 ---
 

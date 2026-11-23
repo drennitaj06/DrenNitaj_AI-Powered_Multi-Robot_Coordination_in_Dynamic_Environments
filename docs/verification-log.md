@@ -505,3 +505,283 @@ Central, chronological record of **executed** verification: automated test runs,
 - **Offline regression: endpoint off equals the stored pre-recovery records** (evidence outside the repository tests; the script is in the session scratchpad and is not committed). Every 12th stored record of each half (100 of the 1 200 no-recovery records) was replayed with the `endpoint` key absent. Steps, released and delivered tasks, robot moves, conflicts, physical collisions, mean flow time and makespan matched the stored values in all 100 episodes (0 mismatches). The repository test `test_endpoint_off_equals_absent_key_and_adds_no_recovery` checks only that explicit `"off"` equals the absent key, not this comparison.
 - **Documentation cleanup (comments and documents only, no algorithm change):** stale T1–T6 and "no deadlock detour / no parking" statements corrected in `control/baseline.py`, `planning/{deadlock,monitor}.py`, `tests/unit/planning/test_monitor.py`, `tests/integration/test_baseline_integration.py`, `docs/{01,02,03}`; FR-PLAN-4 annotated with the Issue #4 triggers without changing the requirement; the E5 run totals (1 200 without recovery, 2 400 in all) made explicit in `docs/05` and `docs/07`; the endpoint-off test renamed and its docstring corrected.
 - **Not verified here:** a CI run; other hardware; the final code on battery power.
+
+### V-12 — Issue #5 preparation: optional PyTorch (`marl` extra), CPU-only installation and CI configuration (2026-11-19)
+- **Scope:** dependency and CI configuration only. No source file, test, scenario, experiment configuration or result was changed. No Git operations were run by Claude.
+- **Approvals (student, 2026-11-19, in chat):** (1) read-only investigation of PyTorch CPU wheel availability; (2) a trial in a disposable virtual environment outside the repository; (3) installation of `torch==2.15.0` CPU into the project `.venv` only; (4) the repository changes below, with a separate lock file for the MARL packages. The local installation and the repository change were approved separately.
+- **Environment:** Windows 11 (build 26300), AMD64, CPython 3.14.3, pip 26.3 in the project `.venv`. Project `.venv` versions: numpy 2.4.6, scipy 1.18.1, hypothesis 6.155.7, torch 2.15.0+cpu.
+- **Wheel availability** (read-only, `pip install --dry-run`, `--only-binary`):
+  - CPU index, Windows: `torch-2.15.0+cpu-cp314-cp314-win_amd64.whl`.
+  - CPU index, Linux x86_64: `torch-2.15.0+cpu-cp312/cp313/cp314-…-manylinux_2_28_x86_64.whl`.
+  - Metadata `Requires-Python >=3.11`, compatible with `requires-python = ">=3.12,<3.15"`.
+  - PyPI only, Linux: the wheel `torch-2.15.0-…-manylinux_2_28_x86_64.whl` (no `+cpu`). The PyPI metadata of torch 2.15.0 lists `cuda-toolkit==13.2.2`, `nvidia-cudnn-cu13`, `nvidia-nccl-cu13`, `nvidia-nvshmem-cu13`, `nvidia-cusparselt-cu13`, `cuda-bindings` and `triton` for Linux. This is why the CPU index is required (`03` §3.4).
+- **Disposable trial** (virtual environment in the session scratchpad, outside the repository, deleted afterwards; pip 25.3). Installed: torch 2.15.0+cpu, filelock 4.2.12, fsspec 2026.9.0, Jinja2 3.1.6, MarkupSafe 3.0.4, mpmath 1.3.0, networkx 3.7, setuptools 84.2.1, sympy 1.14.0, typing_extensions 4.16.0 (numpy 2.4.6 added afterwards for the interoperability check).
+  - `import torch` succeeded (Windows Application Control blocked nothing); `torch.cuda.is_available()` False, `torch.version.cuda` None.
+  - Forward and backward pass of a 356→256→256→5 MLP on a batch of 32: output (32, 5), finite loss, non-zero gradients.
+  - With `torch.set_num_threads(1)`, `set_num_interop_threads(1)` and `torch.use_deterministic_algorithms(True)`, two identical seeded 20-step Adam runs (Huber loss, gradient clip 10) produced bitwise-identical weights (same machine and process).
+  - Warnings: "Failed to initialize NumPy" at import while the venv had no NumPy (expected; absent after numpy 2.4.6 was installed, and `from_numpy`/`.numpy()` then worked); a `UserWarning` from the test script's own `float()` on a tensor with `requires_grad`; a pip "new release available" notice.
+  - The project's 159 files (excluding `.venv`, `.git`, caches, `results`) had identical SHA-256 hashes before and after the trial.
+- **Installation in the project `.venv`:** `pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple torch==2.15.0 numpy==2.4.6 scipy==1.18.1 hypothesis==6.155.7`. Nine packages were added (torch 2.15.0+cpu and the eight dependencies listed in `03` §3.4); `typing_extensions` was already present. A before/after `pip list` comparison shows **no existing package changed**. `pip check` reports no broken requirements. The import, CPU-only, NumPy-interoperability, forward/backward and deterministic one-thread checks were repeated in the project `.venv` with the same results and no import-time warnings.
+- **Dependency configuration changes:**
+  - `pyproject.toml`: new optional extra `marl = ["torch==2.15.0"]`; the base dependency stays `numpy>=2.0`; `dev`, `requires-python` and the numpy, scipy and hypothesis pins unchanged.
+  - New `requirements-lock-marl.txt`: `--extra-index-url https://download.pytorch.org/whl/cpu`, `-r requirements-lock.txt`, `torch==2.15.0+cpu` and its eight dependencies.
+  - `requirements-lock.txt`: two header comment lines pointing to the MARL lock; no pin changed.
+  - `.github/workflows/tests.yml` (`tests` job): installs `.[dev,marl]` with the CPU index, then a new step runs `python -c "import torch; assert torch.version.cuda is None, torch.version.cuda; print(torch.__version__)"`. This **CPU-only guard** fails the job if a CUDA build of torch is installed. The `quality` job is unchanged.
+- **Dry-run resolutions** (`pip install --dry-run --ignore-installed --report`, against a copy of the project in the scratchpad, Windows 11 / Python 3.14.3):
+
+  | Command | Result |
+  |---|---|
+  | `pip install -e .` | 2 packages (numpy 2.5.5, robocoord); no torch, nvidia, cuda or triton |
+  | `pip install -r requirements-lock.txt -e .` | 20 packages; numpy 2.4.6, scipy 1.18.1, hypothesis 6.155.7; no torch, nvidia, cuda or triton |
+  | `pip install -e ".[dev,marl]" --extra-index-url <CPU index>` (the CI command) | 29 packages; `torch==2.15.0+cpu`; numpy 2.5.5; no nvidia, cuda or triton |
+  | `pip install -r requirements-lock-marl.txt -e ".[marl]"` | 29 packages; `torch==2.15.0+cpu`; numpy 2.4.6; no nvidia, cuda or triton |
+  | `pip install -e ".[marl]"` without the index (unsupported, shown for contrast) | 12 packages; `torch==2.15.0` from PyPI |
+
+  - Linux, Python 3.12, 3.13 and 3.14: `pip install --dry-run --no-deps --platform manylinux_2_28_x86_64 --python-version <v> --target <scratch>` with the CPU index as extra index selected `torch-2.15.0+cpu-cp<v>-…-manylinux_2_28_x86_64.whl`; without it the plain PyPI wheel. The `.metadata` files of the three Linux CPU wheels were read: their unconditional dependencies are filelock, typing-extensions, setuptools, sympy, networkx, jinja2 and fsspec, with no CUDA, nvidia or triton entry. **These are wheel-selection and metadata checks. Nothing was installed on Linux and no Linux runtime test was run.**
+- **Quality gates** (project `.venv`, after the configuration changes): `ruff check .` passed · `ruff format --check .`: 127 files already formatted (V-11 recorded 126; the difference of one file is not explained by a recorded cause; the file list of the current run is given below) · `mypy src/robocoord`: no issues in 62 source files.
+  - File list of the 127 (`ruff format --check . --verbose`, ruff 0.17.5, run after the documentation edits of this entry): `format_path` was called for **116 Python files** (the number `ruff check --show-files .` also reports for `.py`) and **11 Markdown files** (the ten files in `docs/` and the root `README.md`). The 126 recorded in V-11 was not accompanied by a file list, so whether it also contained ten Markdown files was not checked; the cause of the difference between 126 and 127 is therefore **not established**.
+- **Fast suite** (`pytest -q -p no:cacheprovider --cov=robocoord`): **650 passed, 36 deselected**, 676.72 s (0:11:16), coverage total **96 %** (6 419 statements, 211 missed). An earlier run on the same environment, before the configuration changes and after the torch installation, gave 650 passed, 36 deselected, 283.31 s, 96 %. The difference in duration was not investigated.
+- **Long suite:** not re-run. No source or test file changed and no module imports torch yet. The last recorded result is 36 passed (V-11).
+- **Git state:** `.git/HEAD` read as `refs/heads/develop`; no Git command was run by Claude.
+- **Known limitations / open problems:**
+  - The GitHub Actions workflow with the new install and guard steps has **not been run**.
+  - Python 3.12 and 3.13 are not installed on the development machine. The full dependency resolution and the tests were **not** run on them. Only the Linux wheel selection and metadata above cover those versions.
+  - Runtime compatibility of torch 2.15.0 with the NumPy that CI resolves (2.5.5) was **not tested**. The local trial and installation used NumPy 2.4.6.
+  - Linux and Windows-on-3.12/3.13 installation and runtime behaviour were not tested.
+  - The slow and e2e suites were not re-run because no source code changed.
+  - Torch determinism was shown only as bitwise-identical repeated runs on this machine, with one thread, for one small network. Throughput of simulation plus training is unmeasured; the Double-DQN gather/scatter operations under deterministic mode are untested.
+
+### V-13 — Documentation: experiment terminology and seed blocks for Issues #5 and #6 (2026-11-19)
+- **Scope:** documentation only. No code, test, configuration or result was changed. No Git operations were run by Claude.
+- **Clarification of historical terminology.** V-8 to V-11, GitHub issue #8 and the stored file and directory names call the non-learned runs of Project Issue #4 "preliminary E5" or "E5". Under the approved eight-issue experiment mapping, E5 and E6 belong exclusively to plan Issue #8. These runs are now called the **Issue #4 system comparison**. The V-8 to V-11 entries are historical records and are not rewritten. The names `e5_prelim*`, `e5_recovery*`, `e5_scenario` and `e5_diagnostics.py` are file, directory and function names, not experiment labels.
+- **Seed blocks** (`05` §B.1): the validation range is split into block A (10 000–10 019, periodic validation and checkpoint selection) and block B (10 020–10 099, development comparisons in Issues #5 and #6 after configuration freeze, never used for selection or tuning). Test seeds 20 000–20 999, including 20 200–20 249, are reserved for the official E5 and E6 evaluation in Issue #8. The Issue #4 system comparison already used 20 200–20 249 (and E3b used 20 100–20 129) without tuning on them.
+- **Plan changes:** acceptance criterion 3 of Issue #5 now reads "paired held-out development comparisons (validation block B)"; the E4 row in `05` §B.4 states that Issues #5 and #6 evaluate final policies on block B.
+- **Decisions recorded for Issue #5 (student, 2026-11-19):** checkpoint selection over the 60 block-A A\* episodes is lexicographic — maximum overall task completion rate, then maximum mean discounted base return (potential-based shaping excluded); both metrics are reported overall and per scenario level. Training root seeds are 1, 2 and 3, with the same scenario-sampling sequence across runs and independent algorithmic random streams.
+- **Files changed:** `docs/02`, `docs/03`, `docs/04`, `docs/05`, `docs/07`, this log.
+
+### V-14 — Issue #5 implementation: multi-agent environment, MADQL, training pipeline and learned controller (2026-11-19)
+- **Scope:** implementation and verification of Issue #5 as approved by the student on 2026-11-19 (design final; selection rule and run seeds as in V-13). PPO (Issue #6) and E5/E6 (Issue #8) are not part of it. No Git operations were run by Claude. `docs/SESSION_HANDOFF.md` was not modified: SHA-256 `ba4a439c…5fa3` before and after.
+- **Environment:** Windows 11 (build 26300), 12 logical CPUs, CPython 3.14.3, NumPy 2.4.6, SciPy 1.18.1, Hypothesis 6.155.7, torch 2.15.0+cpu, ruff 0.17.5.
+- **New code:** `src/robocoord/marl/`.
+  - NumPy only: `config`, `observation`, `reward`, `global_state`, `scenarios`, `env`, `vector_env`, `replay`.
+  - Torch: `networks`, `madql`, `checkpoint`, `policy`, `trainer`.
+  - Torch imported lazily: `evaluation` (learned controllers only).
+  - `devcompare`.
+  - Configs: `configs/training/madql.toml` and `madql_smoke.toml`.
+- **Changed code:**
+  - `sim/view.py`: optional `reference_paths` and `goal_distance` fields.
+  - `sim/coordinator.py`: `PathReporting` protocol.
+  - `planning/coordinator.py`: `reference_paths(limit)`.
+  - `sim/engine.py`: opt-in `view_extras` and `path_limit`.
+  - `cli.py`: `--controller madql`, `--checkpoint`, and the `train` subcommand.
+  - `.github/workflows/tests.yml`: the `quality` job installs `.[dev,marl]` with the CPU index, because mypy needs torch's types.
+  - Without view extras the engine's traces are byte-identical to before (`tests/integration/test_view_extras.py`, A\* and RRT\*).
+- **New tests:**
+  - `tests/unit/marl/` (`test_observation.py`, `test_reward.py`, `test_madql.py`, `test_devcompare.py`);
+  - `tests/integration/` (`test_view_extras.py`, `test_marl_env.py`, `test_marl_training.py`, `test_marl_learning_sanity.py`, marked `training`);
+  - `tests/e2e/test_train_subprocess.py`.
+
+  They cover:
+  - `04` §6 tests 1–6 (test 6 is the chain-MDP sanity check plus the `training`-marked test against a random policy);
+  - `04` §8 tests;
+  - X-1 with the learned controller (A\* and RRT\* × shield off and predictive);
+  - X-7 (round-trip, sidecar, tamper check);
+  - X-13 (telescoping with β ∈ {0, 0.3, 1} on terminated and truncated episodes; zero potential at termination);
+  - truncation look-ahead equivalence and termination precedence;
+  - seed-block enforcement.
+
+  No existing test was changed or weakened.
+- **Step budget decision (cited in `04` §6):**
+  - A 40 000-step trial of the full configuration ran alone on this machine (curriculum fractions as approved, validation off). It took 133.2 s wall time, 26.5 s of which was the final block-A validation, with 9 186 gradient updates.
+  - Interval throughput fell from 554 steps/s (stage 1, before learning updates dominate) to 245–327 steps/s in stage 3.
+  - With three runs sharing the machine, 1 000 000 environment steps per run was chosen. That is about 2 h per run at the measured rates, including periodic validation.
+  - Measured afterwards in the real runs: 183–193 training steps/s per run (validation excluded) and 7 176–7 581 s wall time per run.
+  - The trial configuration and output are in the session scratchpad and are not committed.
+- **Quality gates** (after all changes): `ruff check .` passed. `ruff format --check .`: 153 files already formatted (Python and Markdown). `mypy`: no issues in 78 source files.
+- **Fast suite** (`pytest -q -p no:cacheprovider --cov=robocoord`): **809 passed, 45 deselected**, 274.16 s, total coverage **95 %** (7 719 statements, 307 missed).
+  - An earlier run of the same suite, while the three trainings ran in parallel, gave 808 passed, 43 deselected, 699.84 s, 94 %. That was before the two learning-sanity tests and the cp1252 regression test were added.
+  - Before Issue #5 the suite gave 650 passed, 96 % (V-12).
+  - Per-module coverage of the new torch modules in this run: `trainer` 85 %, `madql` 86 %, `evaluation` 87 %, `devcompare` 82 %, `checkpoint` 96 %, `policy` 98 %. Their long-run paths are exercised by the `slow`, `e2e` and `training` tests rather than by the fast suite.
+- **Long suite** (`pytest -p no:cacheprovider -m "slow or e2e or training"`): **45 passed, 809 deselected** in 166.54 s. The learning-sanity test took 33.4 s for run seed 1 and 32.1 s for run seed 2.
+- **Defects found and fixed during verification:**
+  1. `python -m robocoord.marl.devcompare` exited with code 1 **after** writing every result file. Printing the summary's "−" to a redirected Windows (cp1252) console raised `UnicodeEncodeError`. The fix replaces unencodable characters on console output only. The regression test is `test_main_prints_the_summary_on_a_cp1252_console`.
+  2. `docs/03` §5 contained a backspace character in place of `\b` in `$\bar D$`. It was introduced by an Issue #5 documentation edit and is now corrected. The same cause, an escape sequence interpreted by the editing script, had turned the opening backtick and the `r` of `ruff` in the V-12 file-list note into a carriage return. That note is restored to its intended text (`ruff format --check . --verbose`); its content is otherwise unchanged. A scan of 178 text files (`docs`, `src`, `tests`, `configs`, `README.md`, `pyproject.toml`, the MARL lock and the workflow) now finds no control character, tab or lone carriage return.
+  3. `ruff format` reformats Python code blocks in Markdown and flagged a comment spacing in `docs/03` §6; corrected.
+  4. `docs/03` §3.4 still said the torch-import rule was "not yet implemented"; it now describes the implementation.
+- **Not verified here:**
+  - a GitHub Actions run, including the changed `quality` job;
+  - Linux, and Python 3.12 and 3.13;
+  - peak process memory of training (the replay buffer alone is 160.2 MB by `ReplayBuffer.nbytes`);
+  - determinism across machines (shown only on this machine with one torch thread).
+
+### V-15 — Issue #5 results: MADQL training (E4, MADQL part) and the block-B development comparison (2026-11-19)
+- **Training runs:**
+  - Command: `for s in 1 2 3; do python -m robocoord train --config configs/training/madql.toml --seed $s --out results/training/madql_seed$s; done`, run concurrently.
+  - All three reached 1 000 000 environment steps. Their logs contain no error or warning.
+  - The background shell that launched them reported exit code 1. That came from a trailing `tail` display command in the wrapper, not from a training process: all three `summary.json` files, the checkpoints and the validation logs are complete.
+- **Selection verified by recomputation:**
+  - For each run, the lexicographic maximum over `validation.jsonl` equals the step recorded in `best.json`: 800 000, 1 000 000 and 700 000.
+  - The SHA-256 of each `best.pt` matches its sidecar, and its weights are tensor-identical to the selected step checkpoint. The file bytes differ only through torch's archive serialisation.
+
+  | run seed | selected step | `best.pt` SHA-256 | config hash |
+  |---|---|---|---|
+  | 1 | 800 000 | `dd9f088c2bfe807844579548e7603751b6041de10c74532d422a40b92f31ce83` | `3ffb73239e1a48d0` |
+  | 2 | 1 000 000 | `c66bd8c2d606e70586e639027d5a15987b302e799bfe022e060034d9524f6856` | `59fee33cc03bf89a` |
+  | 3 | 700 000 | `492f2a61d23a5ed1bbf0dfd5847c59988d87fed94108ee0890ac7ab67a657258` | `fa1ea5b4509dd8a0` |
+
+  The configuration hashes differ only through `run_seed`, which is part of the hashed configuration.
+- **Seed hygiene (checked from the stored records):**
+  - Training episodes used seeds 6–9 993.
+  - Validation used 10 000–10 019.
+  - The development comparison used 10 020–10 099.
+  - No seed in 20 000–20 999 appears in any record.
+- **Development comparison:**
+  - `python -m robocoord.marl.devcompare … --workers 10`, run **once** after selection: 1 500 episodes in 2 109 s.
+  - Its process also exited with code 1, after writing `manifest.json`, all 1 500 records, `analysis.json` and `summary.md`. The cause is defect 1 of V-14; the results were not re-run or changed.
+- **Results** (details in `05` §B.6, E4 and the Issue #5 development comparison):
+  - Block-A selected completion: 0.715, 0.635 and 0.631.
+  - On block B, MADQL completes fewer tasks than the baseline (pooled −0.41 with A\*, −0.31 with RRT\*) and than the reference follower (−0.32, −0.21). This is a **negative result** for completion.
+  - It proposes 13–16 fewer conflicts per 100 robot-steps than the reference follower.
+  - Its per-step conflict rate against the baseline is not clearly different and is confounded by episode length.
+  - 0 physical collisions in all training, validation and comparison episodes.
+- **Storage:** results (192 MB of training output, plus the comparison) are local and git-ignored. No checkpoint was committed or placed in `models/` (ADR-9; the final selection for `models/` is Issue #6).
+
+### V-16 — Issue #6 implementation: PPO (MAPPO/IPPO), rollout and GAE, separate trainer, learned-controller modes, matched baseline and block-B study tooling (2026-11-20)
+- **Scope:** the approved Issue #6 design (Revisions 1 and 2, decisions D1–D12). No Git operations were run by Claude; the student performs all Git operations.
+- **Environment:** as V-17 (Windows 11 build 26300, 12 logical CPUs, CPython 3.14.3, NumPy 2.4.6, torch 2.15.0+cpu).
+- **New modules:** `marl/rollout.py`, `marl/ppo.py`, `marl/ppo_trainer.py`, `marl/pilot.py`, `marl/study.py`. Configurations `configs/training/{mappo,ippo,ppo_smoke}.toml` and `mappo_{zeta0,beta0,crr05,crr2}.toml`; each ablation file differs from `mappo.toml` only in its name and the one changed reward weight (checked with `diff`).
+- **Additive changes to Issue #5 modules** (defaults keep the Issue #5 behaviour):
+  - `vector_env`: `with_state=True` returns global states and $\phi(s_T)$ of truncated copies, captured before the auto-reset;
+  - `checkpoint`: the model-version table (`mlp-q-v1`, `mlp-pi-v1`);
+  - `policy`: `LearnedController` runs either network type; explicit `stochastic` mode (PPO sampling, MADQL ε-greedy with ε = 0.05);
+  - `evaluation`: controllers `baseline-noresolver` and `ppo`; allocator, mode and replicate fields; additional per-episode record fields (`undelivered`, `conflicts_per_delivered`, `shaped_return`, `shield_interventions`, `makespan`, timing);
+  - `devcompare`: the matched comparator, the absolute conflict metrics and the algorithm-level bootstrap;
+  - `cli`: `--controller ppo`, `train --resume`, PPO configuration dispatch; a checkpoint of the wrong algorithm exits with code 2.
+- **MADQL regression (frozen):**
+  - `obs-v1`, `reward-v1` and the MADQL trainer are unchanged; the Issue #5 MADQL tests pass unchanged.
+  - `devcompare.analyse` reproduces the stored Issue #5 `analysis.json` exactly (test).
+  - Fresh greedy MADQL episodes reproduce the historical block-B records field by field (V-18, stochastic experiment).
+  - No Issue #5 record, checkpoint or result file was modified: `results/dev5/comparison/records.jsonl` has the same SHA-256 (`53b4e114583b4811…`) before and after Issue #6 (`results/dev5_records_sha_before_issue6.txt`).
+- **Tests added** (all pass): `tests/unit/marl/test_rollout.py`, `test_ppo.py`, `test_ppo_sanity.py`, `test_study.py`; `tests/integration/test_ppo_rollout.py` (R1–R6), `test_ppo_training.py`, `test_ppo_learning_sanity.py` (marked `training`), `test_ppo_pilot.py`, `test_x4_matrix.py` (X-4: all 16 combinations plus 8 shielded variants); `tests/e2e/test_ppo_subprocess.py`; three Issue #6 tests in `tests/unit/marl/test_devcompare.py`.
+- **Quality gates (final run, after all experiments):**
+  - `pytest --cov` (default fast suite): **885 passed, 62 deselected** in 357 s; branch coverage 94 % overall (`marl/rollout.py` 97 %, `ppo.py` 94 %, `ppo_trainer.py` 91 %, `pilot.py` 98 %, `study.py` 84 %).
+  - `pytest -m "slow or e2e or training"`: **62 passed**, 885 deselected, in 279 s (includes the RRT\* X-4 cases, the PPO subprocess e2e test and both `training`-marked learning-sanity tests).
+  - `ruff check src tests`, `ruff format --check src tests` (157 files) and `mypy` (strict, 83 source files): no issues. The formatter was run on an explicit file list that excludes `docs/` (the student's `docs/SESSION_HANDOFF.md`, SHA-256 `ba4a439c…`, is unchanged).
+- **Deviations and fixes found during implementation:**
+  1. **Training seed order wrap-around (deviation from the design).** PPO finishes episodes far faster than MADQL (about 9 400–9 900 episodes per 1 M steps against about 3 470). The first launch of the six runs was stopped by Claude after about 5 minutes (MAPPO at 40 000–50 000 steps, before its first validation; IPPO at 110 000 steps, after the validations at 50 000 and 100 000), because the 10 000 training seeds could have run out and the trainer would then have failed partway through. In the PPO trainer only, the fixed order now restarts from its beginning when exhausted (training block 0–9 999 only; every wrap is logged; `seed_order_passes` in the summary; tested). The aborted directories are kept in `results/training/_aborted_issue6_seedpool/`; none of their output is used for selection or results. They also serve as a reproducibility check: the aborted IPPO validations at 50 000 and 100 000 steps equal those of the final runs, and the step checkpoints there are byte-identical (verified by SHA-256 during the Issue #6 finalisation). **No final run actually wrapped:** the 14 runs used 0.938–0.992 passes.
+  2. Rollout length $T_r$ = 125 instead of the documented 128, so that one iteration (1 000 environment steps) divides the 50 000-step validation interval (approved D4).
+  3. The planned registry name `from_ppo` was not needed; `LearnedController.from_checkpoint` reads the network type from the model-version table.
+  4. `03` §5: the heading "5.7 `experiments`" had been merged into the preceding line by an Issue #5 edit; restored.
+  5. **Conflict-rate denominators differ by source (D10):** evaluation records divide by all robot-steps; the training log divides by non-idle robot-steps. The absolute metrics `conflicts_total` and `conflicts_per_delivered` are therefore reported alongside the rate.
+  6. Summary field `episodes` counts scenarios started, including the 8 in progress at the end of a run; completed episodes are 8 fewer.
+  7. **Procedure note.** One early `ruff format --check docs` run read the student's `docs/SESSION_HANDOFF.md` (check mode only; nothing was written, and its SHA-256 is unchanged). All later format commands use explicit file lists without `docs/`.
+
+### V-17 — Issue #6: RRT\*-in-training feasibility pilot (D7) and the provenance of the earlier RRT\* step cost (2026-11-20)
+- **Scope:** the approved measurement gate before any PPO training. No training run used RRT\*. No Git operations were run by Claude.
+- **Command:** `python -m robocoord.marl.pilot --out results/pilot_rrt --validation-s 2093`, run alone on an otherwise idle machine. Raw output: `results/pilot_rrt/{environment.json, cells.jsonl, projection.json}` and `results/pilot_rrt.log`, local and git-ignored. `cells.jsonl` holds every per-step time.
+- **Environment:**
+  - Windows 11 (build 26300), Intel64 Family 6 Model 186, 12 logical CPUs;
+  - CPython 3.14.3, NumPy 2.4.6, torch 2.15.0+cpu.
+  - `environment.json` was written before the first cell configured torch, so it shows 10 threads and non-deterministic mode. Every cell calls `configure_torch(seed, deterministic=True, threads=1)` before measuring.
+- **Protocol (approved D7):**
+  - the real PPO collection-and-update loop (`marl.rollout` + `marl.ppo`; MAPPO, E = 8, T_r = 125, K = 4 × 4 minibatches, updates on);
+  - 2 000 environment steps per curriculum stage, scenario seeds from the fixed training order (training block only);
+  - RRT\* with $n_{\max}$ = 1 000, and A\* on the same seeds;
+  - two action sources: an untrained seeded actor (run seed 1) and reference-follower actions (the planner's suggestion; updates still run);
+  - 1 h cap per cell; **no cell hit the cap**.
+  - Every planner `plan` call was timed through a wrapper on the planner factory, used only inside the pilot process.
+
+| planner | source | stage | env steps/s | step mean / median / p95 (ms) | planner calls per env step | planner share | update share | episodes finished |
+|---|---|---|---|---|---|---|---|---|
+| A\* | untrained PPO | 1 | 457.9 | 0.66 / 0.57 / 1.20 | 1.50 | 0.030 | 0.170 | 8 |
+| A\* | untrained PPO | 2 | 423.8 | 0.77 / 0.66 / 1.46 | 1.56 | 0.035 | 0.152 | 0 |
+| A\* | untrained PPO | 3 | 258.2 | 1.98 / 1.34 / 6.47 | 3.01 | 0.045 | 0.166 | 0 |
+| A\* | reference | 1 | 484.4 | 0.54 / 0.44 / 1.12 | 0.30 | 0.007 | 0.196 | 26 |
+| A\* | reference | 2 | 527.4 | 0.53 / 0.44 / 1.01 | 0.17 | 0.005 | 0.139 | 15 |
+| A\* | reference | 3 | 333.2 | 1.19 / 0.92 / 2.87 | 0.38 | 0.010 | 0.213 | 4 |
+| RRT\* | untrained PPO | 1 | 9.06 | 108.1 / 89.6 / 242.0 | 1.51 | 0.976 | 0.004 | 8 |
+| RRT\* | untrained PPO | 2 | 7.64 | 127.5 / 103.5 / 360.6 | 1.54 | 0.971 | 0.006 | 0 |
+| RRT\* | untrained PPO | 3 | 7.44 | 130.8 / 113.2 / 284.3 | 3.02 | 0.962 | 0.005 | 0 |
+| RRT\* | reference | 1 | 51.07 | 17.0 / 0.47 / 102.9 | 0.22 | 0.873 | 0.017 | 24 |
+| RRT\* | reference | 2 | 46.63 | 17.7 / 0.69 / 109.1 | 0.21 | 0.850 | 0.018 | 18 |
+| RRT\* | reference | 3 | 56.19 | 14.6 / 1.11 / 71.7 | 0.35 | 0.808 | 0.029 | 1 |
+
+  Peak process memory (RSS) was at most 400 MB in every cell.
+- **Projection:** $T_\text{proj} = \sum_\text{stage}$ share · 10⁶ / throughput $+ T_\text{val}$.
+  - $T_\text{val}$ = 2 093 s: the mean measured validation time of the three Issue #5 MADQL runs (A\* block A every 50 000 steps plus RRT\* monitoring; the same procedure is used for PPO).
+
+  | planner / source | training (h) | total (h) |
+  |---|---|---|
+  | A\* / untrained PPO | 0.86 | 1.44 |
+  | A\* / reference | 0.69 | 1.27 |
+  | RRT\* / untrained PPO | 35.72 | **36.30** |
+  | RRT\* / reference | 5.35 | **5.93** |
+
+  RRT\* takes 41.7× (untrained) and 7.8× (reference) the A\* training time.
+- **Decision under the approved rule:** the untrained-actor projection is above 24 h and the reference projection is below it, so the result is **borderline**.
+  - The evidence is reported to the student, and no RRT\* training run is added without the student's decision.
+  - The approved A\*-only training proceeds, with cross-planner evaluation as for MADQL.
+- **Limitations:**
+  - 2 000 steps per stage cover only 8–34 scenarios.
+  - The untrained actor finished no episode in stages 2 and 3, so resets are under-represented there.
+  - A learning policy moves between the two action sources over training, so the real cost would lie between the projections, with a weighting the pilot cannot predict.
+  - Throughput was measured with one process running. Three or more concurrent runs are slower, as in Issue #5.
+- **Provenance of the earlier RRT\* figure (D12):**
+  - The "about 717 ms per step against 1.9 ms for A\*" quoted in `03` §7 for Issue #5 came from a design-phase scratchpad script (uniform random masked actions, 8 robots, 100 steps, seed 10 000).
+  - Its output was not stored and has no verification-log entry, so it cannot be reproduced from the repository's records.
+  - It used a different configuration from this pilot (one environment, 32×32 maps, random actions instead of the PPO loop over the curriculum), so the numbers are not comparable.
+  - This pilot replaces it as the recorded evidence for the Issue #6 decision. The `03` §7 sentence is kept as the historical reason for Issue #5's A\*-only training and now points here.
+
+### V-18 — Issue #6 results: PPO training (E4, PPO part), Option C reward ablation and the block-B development experiments (2026-11-20)
+- **Training runs** (A\* only, as decided after V-17):
+  - `python -m robocoord train --config configs/training/<cfg>.toml --seed <s> --out results/training/<cfg>_seed<s>` for `mappo` and `ippo` × seeds 1–3 (six concurrent runs), then the four Option C cells × seeds 1–2 (eight concurrent runs, alongside the block-B evaluations).
+  - All 14 runs reached 1 000 000 environment steps (1 000 iterations). No log contains a traceback; no run was resumed; no run wrapped the training seed order (0.938–0.992 passes).
+  - 0 physical collisions in every training, validation and RRT\* monitoring episode.
+- **Selection verified by recomputation:** for every run, the lexicographic maximum over the A\* records of `validation.jsonl` equals the step in `best.json`; the SHA-256 of `best.pt` matches its sidecar; its tensors equal those of the selected step checkpoint.
+
+  | run | selected step | `best.pt` SHA-256 | config hash |
+  |---|---|---|---|
+  | MAPPO 1 | 200 000 | `e0979974682ec0709f62c31513cc6baf7dff7e171d697a21f9aa011b1b382f2b` | `ff0390663415d758` |
+  | MAPPO 2 | 300 000 | `9ebc8afd047188f023a287056580d75697b1ac6a85f76b4a0b32739fe65ea810` | `769a47efaa198388` |
+  | MAPPO 3 | 150 000 | `a0af8b8ac00ccf1a32e8672d60b8078b526d89fd283cc29ac95c120baf82de6d` | `811372818b356fe3` |
+  | IPPO 1 | 550 000 | `3706f6c6895c289f336de47b4e955cd5eb985216a9f27e5fec605c718ee8d896` | `6f44e5a66efbf817` |
+  | IPPO 2 | 250 000 | `47d849e4262d861493bc0ae19c32fb77afe6fef4bd4576fbb2ce53762390de08` | `0010f38af22fd0ac` |
+  | IPPO 3 | 500 000 | `d350e4170d05aca6ea592f56cc0846591db8e909c4b3350305aac258d7b81c6d` | `6df5586db1fc2a91` |
+
+  The eight ablation checkpoints (`results/training/mappo_{zeta0,beta0,crr05,crr2}_seed{1,2}/best.pt`) were verified the same way; their hashes are in `results/dev6/ablation/manifest.json`.
+- **Seed hygiene (from the stored records):** training episodes used seeds 0–9 999; validation 10 000–10 019; every Issue #6 block-B record (15 360 episodes) lies in 10 020–10 099. No seed in 20 000–20 999 appears in any record.
+- **Block-B experiments** (`python -m robocoord.marl.study <experiment> …`, each run once, after selection):
+
+  | experiment | episodes | output |
+  |---|---|---|
+  | `matched-baseline` | 300 | `results/dev6/baseline_matched/` |
+  | `ppo` (6 policies) | 1 800 | `results/dev6/ppo/` |
+  | `ablation` (8 policies, A\* only) | 1 920 | `results/dev6/ablation/` |
+  | `shield` (9 policies, full level) | 2 700 | `results/dev6/shield/` |
+  | `stochastic` (9 policies, A\*; greedy + 3 replicates) | 8 640 | `results/dev6/stochastic/` |
+
+  - All processes exited with code 0. 0 physical collisions in all 15 360 episodes.
+  - **Determinism check:** the 720 fresh greedy MADQL episodes of the stochastic experiment equal the historical Issue #5 records in every stored field except `wall_s` (`results/dev6/stochastic/determinism_check.json`: 720 compared, 0 mismatches).
+  - **Historical records untouched:** `results/dev5/comparison/records.jsonl` has SHA-256 `53b4e114583b4811aeba21e0deddb3210a79400b8c481f3dd088fd2841318e4b` before Issue #6 (`results/dev5_records_sha_before_issue6.txt`) and after all Issue #6 experiments.
+- **Analysis:** `python -m robocoord.marl.study analyse --root results/dev6` (82 s) wrote `analysis.json` and `summary.md`. A first run labelled the Issue #5 MADQL records in the shield summaries with an empty allocator (`madql-seed1//off`), because those records predate the allocator and shield fields. The paired comparisons were already correct (they default to auction / off). The grouping was fixed in `marl/study.py`, a regression test added (`test_shield_analysis_labels_historical_records_as_auction_off`), and the analysis re-run; no record changed.
+- **Results** (details in `05` §B.6: E4 PPO part, the reward ablation and the Issue #6 development comparison):
+  - block-B completion: PPO 0.982–0.992 (A\*) and 0.983–0.995 (RRT\*); MADQL − PPO about −0.40 (A\*) and −0.30 (RRT\*);
+  - PPO against the matched baseline: no detectable completion difference on A\*, slightly lower on RRT\*; against the original baseline (resolver on): −0.009 to −0.019 (A\*);
+  - PPO proposes more conflicts than both baselines; MAPPO's two earliest selected checkpoints account for most of it (robot–obstacle conflicts), which the predictive shield removes;
+  - the Option C ablation shows no completion effect; its return and conflict differences are confounded with the selected training step;
+  - stochastic execution raises completion for every policy (PPO to 0.999; MADQL to 0.888–0.918).
+- **Storage:** 1.5 GB of training output for the 14 runs, plus 15 MB in `results/dev6/` and 213 KB in `results/pilot_rrt/`; all local and git-ignored. No checkpoint was placed in `models/` or committed; the candidate files are proposed to the student for approval (ADR-9).
+
+### V-19 — Issue #6 finalisation: completeness, integrity and documentation cross-check (2026-11-20)
+- **Scope:** the student's Issue #6 finalisation request, on branch `feature/marl-ppo` (read from `.git/HEAD`; no Git command was run). Nothing was trained or evaluated for this entry.
+- **Final quality gates** (no source change since; `-W default` shows warnings the default configuration hides):
+  - `pytest --cov -W default` (fast suite): **885 passed, 62 deselected, 2 warnings**, 487 s; 94 % branch coverage.
+  - `pytest -m "slow or e2e or training" -W default -rA`: **62 passed, 885 deselected, 0 warnings**, 409 s.
+  - `ruff check src tests`, `ruff format --check src tests` and `mypy` (strict, 83 files): no issues.
+  - **Open item (minor, not fixed):** the 2 warnings are `ResourceWarning`s from `test_resume_at_an_iteration_boundary`. `PPOTrainer.train` closes `train_log.jsonl` and `validation.jsonl` only on normal completion, so an exception leaves the handles to garbage collection. Every record is flushed when written, so no data can be lost. A `try`/`finally` in `train` would close them; the frozen MADQL trainer has the same pattern.
+- **Experiments complete:** 14 training runs × 1 000 000 steps (6 main, 8 ablation; 20 validations each, no resume, no `pre_resume` files); block-B experiments with the expected record counts and unique keys (matched baseline 300, PPO 1 800, ablation 1 920, shield 2 700, stochastic 8 640), all seeds in 10 020–10 099.
+- **No output overwritten:** each `results/dev6/<experiment>` directory was written once (manifest before records); only the derived `analysis.json` / `summary.md` were regenerated (V-18). Every file under `results/dev5/` and `results/training/madql_seed{1,2,3}/` was last written on 2026-11-19; the historical records keep SHA-256 `53b4e114…`, and the three MADQL `best.pt` hashes equal V-15.
+- **Checkpoints:** the nine candidate `best.pt` files (MADQL, MAPPO and IPPO × run seeds 1–3) are 636 401 bytes each, contain only the six network tensors, match their sidecar SHA-256, and their sidecars contain every ADR-9 field (`mlp-q-v1` for MADQL, `mlp-pi-v1` for PPO). Renamed copies load through `LearnedController.from_checkpoint`.
+- **Aborted runs as a reproducibility check:** the aborted IPPO runs of the first launch (V-16, deviation 1) reached 110 000 steps; their validations at 50 000 and 100 000 equal those of the final runs, and the step checkpoints are byte-identical.
+- **Documentation cross-checked against the records** (scripted): 43 of the 46 algorithm-level rows of `analysis.json` that `05` reports appear verbatim (the other 3 are conflict rows against the original baseline, not tabulated by design); the pooled block-B table, the ablation table, the pilot projection and the parameter counts of `04` were recomputed. **Corrected:** two last-digit roundings in the ablation table (β = 0 return +1.27, not +1.28; $c_{\text{rr}}$ = 0.5 lower bound 0.46, not 0.47), IPPO 2's block-B A\* completion (0.989, not 0.990), and V-16's description of the aborted launch (IPPO had validated twice).
+- **Deviations from the approved design**, all documented: the training seed-order wrap-around (V-16, `03` §7; never triggered); $T_r$ = 125 (D4); the unused registry name `from_ppo`; the stochastic diagnostic on block B A\* only (as approved in Revision 2); summary `episodes` counting started scenarios.

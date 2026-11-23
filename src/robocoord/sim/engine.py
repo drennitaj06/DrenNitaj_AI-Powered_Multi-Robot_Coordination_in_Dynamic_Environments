@@ -7,8 +7,9 @@ Step ``t`` → ``t + 1``:
 3. the coordinator (re)assigns tasks — and, from Issue #3, (re)plans;
 4. observations: a :class:`~robocoord.sim.view.WorldView` with action masks and suggestions;
    the controller returns a joint proposal;
-5. the optional safety shield (Issue #4, ``control.shield``): ``a^ctrl → a^arb``; identity if
-   none is configured;
+5. the optional Execution Supervisor (Issue 6A Phase 3, ``control.supervisor``): ``a^ctrl →
+   a^sup``, then the optional safety shield (Issue #4, ``control.shield``): ``a^sup → a^arb``;
+   each is the identity if none is configured;
 6. conflict detection + arbitration on ``a^arb``; physical-collision invariant check (G1);
 7. counterfactual conflict sets ``K^ref`` (the suggested actions, masked → stay) and
    ``K^ctrl`` (the controller's raw proposal) when suggestions exist (model §9.2, X-10), and the
@@ -44,7 +45,13 @@ from robocoord.sim.conflicts import (
     detect_conflicts,
     physical_violations,
 )
-from robocoord.sim.coordinator import Coordinator, NullCoordinator, PlanReporting
+from robocoord.sim.coordinator import (
+    Coordinator,
+    DetourReporting,
+    NullCoordinator,
+    PathReporting,
+    PlanReporting,
+)
 from robocoord.sim.metrics import EpisodeMetrics, MetricsRecorder
 from robocoord.sim.trace import TraceWriter
 from robocoord.sim.view import (
@@ -84,6 +91,9 @@ class EngineStateError(RuntimeError):
 
 _MODE_CODE = {RobotMode.IDLE: "I", RobotMode.TO_PICKUP: "P", RobotMode.TO_DROPOFF: "D"}
 
+#: Optional view data for learned controllers (Issue #5); see ``WorldView``.
+VIEW_EXTRAS: frozenset[str] = frozenset({"paths", "goal_distance"})
+
 
 class SafetyLayer(Protocol):
     """What the engine needs from a shield (implemented by ``control.shield.Shield``)."""
@@ -102,12 +112,33 @@ class SafetyLayer(Protocol):
     def stats(self) -> dict[str, Any]: ...
 
 
+class SupervisorLayer(Protocol):
+    """What the engine needs from an execution supervisor (``control.supervisor``)."""
+
+    mode: str
+
+    @property
+    def enabled(self) -> bool: ...
+
+    def reset(self) -> None: ...
+
+    def apply(
+        self, view: WorldView, proposal: Sequence[Action], detour: frozenset[int] = frozenset()
+    ) -> tuple[list[Action], list[Any]]:
+        """The supervised proposal and the changed actions (each event has ``to_json``)."""
+        ...
+
+    def stats(self) -> dict[str, Any]: ...
+
+
 @dataclass(frozen=True)
 class StepOutcome:
     """One step's result. ``actions`` is the controller's raw proposal ``a^ctrl``; ``events`` the
     conflicts of the proposal reaching the arbiter (``a^arb``, after the shield);
     ``reference_events`` / ``controller_events`` the counterfactual sets ``K^ref`` / ``K^ctrl``
-    (``None`` without suggestions); ``shield_events`` the shield's interventions."""
+    (``None`` without suggestions); ``shield_events`` the shield's interventions;
+    ``supervised_actions`` the supervisor's output ``a^sup`` (``None`` when it changed nothing or
+    none is configured) and ``supervisor_events`` its changes."""
 
     t: int  # time after the step
     actions: tuple[Action, ...]
@@ -124,6 +155,8 @@ class StepOutcome:
     controller_events: frozenset[ConflictEvent] | None = None
     arbitrated_actions: tuple[Action, ...] | None = None
     shield_events: tuple[Any, ...] = ()
+    supervised_actions: tuple[Action, ...] | None = None
+    supervisor_events: tuple[Any, ...] = ()
 
     @property
     def done(self) -> bool:
@@ -168,11 +201,24 @@ class Engine:
         stop_when_done: bool = True,
         max_steps: int | None = None,
         shield: SafetyLayer | None = None,
+        supervisor: SupervisorLayer | None = None,
         controller_stats: Callable[[], dict[str, Any]] | None = None,
+        view_extras: frozenset[str] = frozenset(),
+        path_limit: int = 16,
     ) -> None:
         scenario.validate()
+        unknown = set(view_extras) - VIEW_EXTRAS
+        if unknown:
+            raise ValueError(f"unknown view extras {sorted(unknown)}; known: {sorted(VIEW_EXTRAS)}")
+        if path_limit < 1:
+            raise ValueError("path_limit must be >= 1")
+        # Opt-in data for learned controllers (Issue #5). Added only to the view a controller acts
+        # on; reading it has no side effect on the simulation, its traces or its metrics.
+        self.view_extras = frozenset(view_extras)
+        self.path_limit = path_limit
         self.scenario = scenario
         self.shield = shield if shield is not None and shield.enabled else None
+        self.supervisor = supervisor if supervisor is not None and supervisor.enabled else None
         self.controller_stats = controller_stats  # adds extra["controller"] to the summary
         self.coordinator: Coordinator = coordinator or NullCoordinator()
         self._reporting = self.coordinator if isinstance(self.coordinator, PlanReporting) else None
@@ -205,6 +251,8 @@ class Engine:
         if self.shield is not None:
             self.shield.reset()
             self.metrics.enable_shield()
+        if self.supervisor is not None:
+            self.supervisor.reset()
         self.t = 0
         self.terminated = False
         self.truncated = False
@@ -302,7 +350,9 @@ class Engine:
         suggestions = self.coordinator.suggested_actions(self._build_view(None))
         if suggestions is not None and len(suggestions) != len(self.robots):
             raise EngineStateError("coordinator must suggest one action per robot")
-        pending.view = self._build_view(tuple(suggestions) if suggestions is not None else None)
+        pending.view = self._build_view(
+            tuple(suggestions) if suggestions is not None else None, extras=True
+        )
         return pending.view
 
     def apply_actions(self, actions: Mapping[int, Action]) -> StepOutcome:
@@ -324,13 +374,25 @@ class Engine:
             if goal is not None and not self.oracle.reachable(r.position, goal):
                 blocked_goal += 1
 
-        # 5. shield (a^ctrl → a^arb); identity without one
+        # 5a. execution supervisor (a^ctrl → a^sup); identity without one
+        supervisor_events: list[Any] = []
+        sup_proposal = proposal
+        if self.supervisor is not None:
+            detour = (
+                self.coordinator.detour_members()
+                if isinstance(self.coordinator, DetourReporting)
+                else frozenset()
+            )
+            sup_proposal, supervisor_events = self.supervisor.apply(pending.view, proposal, detour)
+            if not supervisor_events:
+                sup_proposal = proposal  # nothing replaced: same object, no second detection
+        # 5b. shield (a^sup → a^arb); identity without one
         shield_events: list[Any] = []
-        arb_proposal = proposal
+        arb_proposal = sup_proposal
         if self.shield is not None:
-            arb_proposal, shield_events = self.shield.apply(pending.view, proposal)
+            arb_proposal, shield_events = self.shield.apply(pending.view, sup_proposal)
             if not shield_events:
-                arb_proposal = proposal  # nothing replaced: same object, no second detection
+                arb_proposal = sup_proposal  # nothing replaced: same object
 
         # 6. detection + arbitration + invariant
         events = detect_conflicts(
@@ -346,12 +408,17 @@ class Engine:
         # 7. counterfactual reference conflicts
         reference_events: frozenset[ConflictEvent] | None = None
         controller_events: frozenset[ConflictEvent] | None = None
-        if self.shield is not None:
+        if self.shield is not None:  # the shield's input is a^sup (= a^ctrl without supervisor)
             raw = (
                 events
-                if arb_proposal is proposal
+                if arb_proposal is sup_proposal
                 else detect_conflicts(
-                    t, positions, proposal, pending.obstacles_now, pending.obstacles_next, self.grid
+                    t,
+                    positions,
+                    sup_proposal,
+                    pending.obstacles_now,
+                    pending.obstacles_next,
+                    self.grid,
                 )
             )
             self.metrics.record_shield(len(shield_events), raw, events)
@@ -384,7 +451,7 @@ class Engine:
             o.previous, o.position = o.position, nxt
         self.metrics.record_step(
             nonidle,
-            proposal,
+            sup_proposal,  # the requested actions (a^ctrl without a supervisor)
             moved,
             events,
             resolution.blocked,
@@ -439,6 +506,8 @@ class Engine:
             controller_events=controller_events,
             arbitrated_actions=tuple(arb_proposal) if arb_proposal is not proposal else None,
             shield_events=tuple(shield_events),
+            supervised_actions=tuple(sup_proposal) if sup_proposal is not proposal else None,
+            supervisor_events=tuple(supervisor_events),
         )
         if self.done and self._reporting is not None:
             self._reporting.finish(self._build_view(None))
@@ -459,13 +528,27 @@ class Engine:
             metrics.extra["planning"] = self._reporting.episode_stats()
         if self.shield is not None:
             metrics.extra["shield"] = {**self.shield.stats(), **self.metrics.shield_summary()}
+        if self.supervisor is not None:
+            metrics.extra["supervisor"] = self.supervisor.stats()
         if self.controller_stats is not None:
             metrics.extra["controller"] = self.controller_stats()
         return metrics
 
     # ================================================================== views and traces
-    def _build_view(self, suggested: tuple[Action, ...] | None) -> WorldView:
+    def _build_view(
+        self, suggested: tuple[Action, ...] | None, *, extras: bool = False
+    ) -> WorldView:
         tasks = self.book.tasks
+        paths: tuple[tuple[Cell, ...] | None, ...] | None = None
+        goal_distance: tuple[int | None, ...] | None = None
+        if extras and "paths" in self.view_extras and isinstance(self.coordinator, PathReporting):
+            paths = self.coordinator.reference_paths(self.path_limit)
+        if extras and "goal_distance" in self.view_extras:
+            goals = [r.goal(tasks) for r in self.robots]
+            goal_distance = tuple(
+                None if g is None else self.oracle.capped_distance(r.position, g)
+                for r, g in zip(self.robots, goals, strict=True)
+            )
         return WorldView(
             t=self.t,
             max_steps=self.max_steps,
@@ -489,6 +572,8 @@ class Engine:
             ),
             masks=tuple(action_mask(self.grid, r.position) for r in self.robots),
             suggested=suggested,
+            reference_paths=paths,
+            goal_distance=goal_distance,
         )
 
     def _header(self) -> dict[str, object]:
@@ -551,6 +636,10 @@ class Engine:
             rec["suggested"] = "".join(a.symbol for a in pending.view.suggested)
         if out.reference_events is not None:
             rec["reference_events"] = [e.to_json() for e in sorted(out.reference_events)]
+        if out.supervisor_events:
+            rec["supervisor"] = [e.to_json() for e in out.supervisor_events]
+            assert out.supervised_actions is not None
+            rec["sup_actions"] = "".join(a.symbol for a in out.supervised_actions)
         if out.shield_events:
             rec["shield"] = [e.to_json() for e in out.shield_events]
             assert out.arbitrated_actions is not None

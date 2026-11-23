@@ -1,4 +1,6 @@
 # Exact versions verified on Windows 11 / Python 3.14.3 (Issue #2). Install: pip install -r requirements-lock.txt -e .
+# This is the BASE lock and contains no PyTorch. For the learned controllers (MADQL, PPO) use
+# requirements-lock-marl.txt, which includes this file: pip install -r requirements-lock-marl.txt -e ".[marl]"
 # numpy is pinned to 2.4.6: on the development machine, Windows Application Control blocked
 # numpy 2.5.5's random/_philox extension (an OS policy issue, not a compatibility issue).
 # hypothesis is pinned to 6.155.7 (Issue #4), the newest pure-Python release: from 6.156.1 on it

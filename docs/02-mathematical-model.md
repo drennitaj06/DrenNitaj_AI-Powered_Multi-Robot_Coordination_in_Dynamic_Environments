@@ -147,7 +147,7 @@ A planner returns, for robot $i$ with goal $g_i$, a cell sequence $P_i = (c_0 = 
 For a query by robot $i$ at time $t$, both planners use the **same** constraint sets, built by one shared function:
 
 - Sensed obstacles: $Z_i(t) = \{z_k(t) : \|z_k(t) - x_i(t)\|_\infty \le r_s\}$. Their predictions are $\hat Z_i(t) = \{\hat z_k(t+1) : z_k(t) \in Z_i(t)\}$.
-- **Hard dynamic block set:** $B_i(t) = \big(Z_i(t) \cup \hat Z_i(t)\big) \setminus \{x_i(t),\, g_i\}$. The robot's own cell and its **goal cell are never dynamically blocked**: an obstacle on a pickup or drop-off cell must not make a task unreachable *for the planner*. *(Corrected in the Project Issue #4 endpoint follow-up.)* This does **not** make the occupation transient: under the obstacle move rule (A-5) an obstacle whose next move is the waiting robot's cell never leaves (measured: 61 undelivered E5 tasks). A persistent occupation is handled by endpoint recovery (§5.3, `04` §5.6).
+- **Hard dynamic block set:** $B_i(t) = \big(Z_i(t) \cup \hat Z_i(t)\big) \setminus \{x_i(t),\, g_i\}$. The robot's own cell and its **goal cell are never dynamically blocked**: an obstacle on a pickup or drop-off cell must not make a task unreachable *for the planner*. *(Corrected in the Project Issue #4 endpoint follow-up.)* This does **not** make the occupation transient: under the obstacle move rule (A-5) an obstacle whose next move is the waiting robot's cell never leaves (measured: 61 undelivered tasks in the Issue #4 system comparison). A persistent occupation is handled by endpoint recovery (§5.3, `04` §5.6).
 - **Proximity set:** $Q_i(t) = \{v \in \mathcal{C} : \min_{z \in Z_i(t)} \|v - z\|_1 \le r_{\text{infl}}\}$. If $Z_i(t) = \varnothing$, the minimum is $+\infty$ and $Q_i(t) = \varnothing$. This includes the goal cell when it is near an obstacle.
 - **Cost density** over the plane: $\omega_i(p) = 1 + \lambda_{\text{prox}} \cdot \mathbb{1}[\text{cell}(p) \in Q_i(t)]$, so $1 \le \omega_i \le 1 + \lambda_{\text{prox}}$.
 
@@ -291,10 +291,28 @@ The MAPPO critic receives $s_i^c = [o_i,\, \phi(s_t)]$, where $\phi$ is a fixed-
 
 Size $4G^2 + 3$. IPPO uses $s_i^c = o_i$.
 
+*Implemented in Issue #6:* the MAPPO critic input has $356 + 259 = 615$ entries for $G = 8$. Only $\phi$ carries the time $t / T_{\max}$, so the IPPO critic cannot see the remaining horizon. One critic is shared by all robots; the robot enters only through $o_i$.
+
 ### 6.3 Episode end
 
 - **Termination:** every released task is delivered and no future releases are scheduled. In this state all robots are idle.
 - **Truncation:** $t = T_{\max}$. Truncation is a time limit, *not* a terminal state of the process. Value targets bootstrap from the value of the final state (`04-algorithms.md` §6–7).
+
+*Issue #6 (PPO):*
+- The truncation bootstrap is $V(o_i(s_T), \phi(s_T))$ for MAPPO and $V(o_i(s_T))$ for IPPO. $s_T$ is the look-ahead state at the horizon, captured before the vector environment resets the episode.
+- After termination the bootstrap is 0.
+- Advantage recursions stop at both ends, so they never cross into the next episode.
+
+### 6.4 Learned policies (Issue #6 note)
+
+- **MADQL** acts greedily on $Q_\theta(o_i, \cdot)$ over the allowed actions $m_i$ (Issue #5).
+- **PPO's shared actor** defines the masked categorical policy
+  $$
+  \pi_\phi(a \mid o_i) = \frac{\mathbb{1}[a \in m_i]\, e^{\ell_a(o_i)}}{\sum_{b \in m_i} e^{\ell_b(o_i)}},
+  $$
+  with logits $\ell(o_i) \in \mathbb{R}^5$. Stay is never masked, so $m_i \neq \emptyset$.
+- **Execution modes.** The main evaluations execute the mode $\arg\max_{a \in m_i} \ell_a$, the *greedy* mode with ties broken to the lowest index. The Issue #6 stochastic diagnostic samples $a \sim \pi_\phi(\cdot \mid o_i)$ for PPO, and uses masked ε-greedy with ε = 0.05 for MADQL.
+- **No identity input.** Neither policy receives a robot identity. Symmetric situations are therefore broken only by the observations, by the arbiter's fixed robot order, or by sampling in the stochastic mode.
 
 ---
 
@@ -518,10 +536,10 @@ The RL base reward of §7 is a *scalarisation* of it. The evaluation reports the
 | G2 | Masked controllers never propose moves into static obstacles or out of bounds | **Guaranteed** | Mask definition, events before masks (§1) |
 | G3 | Determinism for fixed scenario and seed | **Guaranteed** (by design; verified by test X-1) | ADR-8 |
 | G4 | A\* path is $\kappa$-optimal and valid for the query snapshot; unreachability correctly reported | **Guaranteed** | `04` §2.2 |
-| G5 | RRT\* path is valid for the query snapshot; best cost non-increasing in iterations | **Guaranteed** | `04` §3 |
+| G5 | RRT\* path is valid for the query snapshot; best cost non-increasing in iterations. With the optional P2 stopping rules (off by default), the run is an exact prefix of the full-budget run: the guarantee is unchanged, the returned cost is ≥ the full-budget cost, and success equals the full budget's | **Guaranteed** | `04` §3 (implementation notes, budget control) |
 | G6 | Continuous feasibility ⇔ 4-connected grid feasibility under the supercover rule | **Guaranteed** | Lemma 5.1 |
 | G7 | RRT\* asymptotic optimality | **Not claimed for the implemented radius** (revised in Issue #3, see `verification-log.md` V-6; earlier: "Conditional"). The implementation uses the Karaman–Frazzoli radius $\min(\gamma(\log n/n)^{1/d}, \eta)$. Solovey et al. (2020) identified a logical gap in the original optimality proof and proved asymptotic optimality (Euclidean cost) for $\gamma(\log n/n)^{1/(d+1)}$ with a stated lower bound on $\gamma$. The implemented exponent $1/d$ does not meet that condition for any constant. Finite-budget convergence is measured (E1c). | Karaman & Frazzoli 2011 (Thm 38, original radius); Solovey, Janson, Schmerling, Frazzoli & Pavone 2020 (arXiv:1909.09688, Thm 1, corrected radius) |
-| G8 | RRT\* finds a path within a finite budget | **Not claimed** (measured: success rate) | — |
+| G8 | RRT\* finds a path within a finite budget | **Not claimed** (measured: success rate). The P2 stopping rules do not change success for a given budget; with a rule set, RRT\* is no longer anytime, so the E1c convergence measurements do not describe its output | — |
 | G9 | RRT\* runtime $O(n \log n)$ | **Not claimed**. Unconditional and conditional bounds in `04` §3.6 | — |
 | G10 | Auction returns a maximum-cardinality matching, optimal for integer benefits (fixed $\varepsilon$: additive bound $V \ge \mathrm{OPT} - k\varepsilon$ only, **no relative-error guarantee**) | **Guaranteed** (tested against the Hungarian oracle; E3a: 280/280 optimal, every fixed-ε gap ≤ k) | `04` §4.1, §8 |
 | G11 | Higher-priority tasks always assigned first | **Not claimed** (weighted priority, §8.1) | — |
@@ -533,11 +551,11 @@ The RL base reward of §7 is a *scalarisation* of it. The evaluation reports the
 | G17 | Sequential auction: $2V \ge \mathrm{OPT}$ on the offset-inclusive integer objective; maximal matching. Under the connected-component assumption (CC): maximum cardinality and $V \ge \frac{k-1}{k+1}\mathrm{OPT}$. Neither holds in original (unshifted) units. | **Guaranteed** (½); **Conditional** on CC (cardinality, ratio) | `04` §4.2 (proofs, assumptions, counter-examples) |
 | G18 | Keep-current tie-break (`prefer_current`): an optimum of $(k+1)A + E$ is an optimum of $A$ keeping the most current assignments, so no switch at gain $= h$ | **Guaranteed** | `04` §4.3 notes |
 | G19 | Right-of-way baseline (all robots on it, same view): no $\textsf{RR}$ conflict, no $\textsf{ROs}$, no invalid move; no conflict at all if obstacles stay or keep their velocity and $r_s \ge 2$ | **Guaranteed** under these assumptions (property-tested) | `04` §5.3 |
-| G20 | Baseline or deadlock resolver guarantees progress / task completion | **Not claimed**. Conflict-free ≠ deadlock-free. Without endpoint recovery, idle robots are not parked, and a robot waiting for an obstacle that occupies its goal (robot–obstacle goal deadlock: obstacles never enter robot cells, §2; the occupied-goal policy is to wait, §5.3) is handled by neither. Measured in the preliminary E5 without recovery: 89 of 91 undelivered baseline tasks. With recovery see G26. | `04` §5.3 (limitations 3, 6), §5.5; `05` §B.6 |
+| G20 | Baseline or deadlock resolver guarantees progress / task completion | **Not claimed**. Conflict-free ≠ deadlock-free. Without endpoint recovery, idle robots are not parked, and a robot waiting for an obstacle that occupies its goal (robot–obstacle goal deadlock: obstacles never enter robot cells, §2; the occupied-goal policy is to wait, §5.3) is handled by neither. Measured in the Issue #4 system comparison without recovery: 89 of 91 undelivered baseline tasks. With recovery see G26. | `04` §5.3 (limitations 3, 6), §5.5; `05` §B.6 |
 | G21 | Deadlock detour preserves G19 (it changes only goals, never actions) | **Guaranteed** | `04` §5.5 |
 | G22 | A *detected* two-robot deadlock with a passing cell is resolved | **Conditional** on R1–R9 (`04` §5.5, including planner success, which holds for A\* and not for RRT\*'s finite budget, and both robots on the baseline); verified on constructed instances. Only robot–robot wait-for cycles are detected; blocking by idle robots or obstacles is not. Every deadlock resolvable: **Not claimed** (single-lane counter-example). Cycles of ≥ 4 robots: **Not claimed** in general (one constructed geometry tested). | `04` §5.5 |
 | G23 | Shield: never creates a move, so the shielded robot is never at fault in a conflict it causes; removes RO conflicts of moving robots | **Guaranteed** (never at fault); RO removal **Conditional** (constant-velocity obstacles, $r_s \ge 2$); RR conflicts out of scope | `04` §5.4 |
 | G24 | Reference follower: $N^{\text{avoided}} = N^{\text{introduced}} = 0$ and $\mathcal{K}^{\text{ctrl}}_t = \mathcal{K}^{\text{ref}}_t$ (X-10) | **Guaranteed** (by definition; tested in every planner × allocator × shield combination) | §9.2, `04` §5.3 |
-| G25 | Endpoint recovery preserves G1, G19 and the shield's G23 (it changes only monitor goals, never actions, occupancy or obstacle motion) | **Guaranteed** (argument in `04` §5.6; 0 physical collisions and, for the baseline, 0 RR/ROs/INV in every test and E5 recovery run) | `04` §5.6 |
-| G26 | Endpoint recovery delivers every task whose endpoint is held | **Not claimed.** A parking cell or retreat cell may not exist; the occupant may never leave (one-waypoint patrol); after a retreat an obstacle may block a 1-wide approach. Each case is counted (`attempts_exhausted`, `no_retreat_cell`, `no_parking_cell`, `parking_blocked_dynamic`, `unresolved_*_at_end`). Effect measured in E5. | `04` §5.6; `05` §B.6 |
-| G27 | Distance optimisations O1/O2 and symmetric reuse return the same distances and reachability as before | **Guaranteed** (BFS distances are independent of the neighbour expansion order; $D < \infty$ ⇔ same component on an undirected graph; $D$ symmetric). Property-tested against the legacy implementation; identical E5-workload trajectories before/after in the benchmark. | `04` §2.1 |
+| G25 | Endpoint recovery preserves G1, G19 and the shield's G23 (it changes only monitor goals, never actions, occupancy or obstacle motion) | **Guaranteed** (argument in `04` §5.6; 0 physical collisions and, for the baseline, 0 RR/ROs/INV in every test and every recovery run of the Issue #4 system comparison) | `04` §5.6 |
+| G26 | Endpoint recovery delivers every task whose endpoint is held | **Not claimed.** A parking cell or retreat cell may not exist; the occupant may never leave (one-waypoint patrol); after a retreat an obstacle may block a 1-wide approach. Each case is counted (`attempts_exhausted`, `no_retreat_cell`, `no_parking_cell`, `parking_blocked_dynamic`, `unresolved_*_at_end`). Effect measured in the Issue #4 system comparison. | `04` §5.6; `05` §B.6 |
+| G27 | Distance optimisations O1/O2 and symmetric reuse return the same distances and reachability as before | **Guaranteed** (BFS distances are independent of the neighbour expansion order; $D < \infty$ ⇔ same component on an undirected graph; $D$ symmetric). Property-tested against the legacy implementation; identical `e5_scenario`-workload trajectories before/after in the benchmark. | `04` §2.1 |

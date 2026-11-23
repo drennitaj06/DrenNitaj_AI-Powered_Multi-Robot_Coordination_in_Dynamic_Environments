@@ -75,7 +75,7 @@ flowchart LR
 |---|---|
 | #1 | Approved design (revision 2) |
 | #4 | Complete **non-learning** system: simulation, A\*/RRT\*, auction, reference follower, baseline, shield; experiments E1–E3 |
-| #6 | Both MARL algorithms implemented, trained and compared (E4, preliminary E5) |
+| #6 | Both MARL algorithms implemented, trained and compared (E4, development comparison) |
 | #8 | Final project: data-driven scenarios, visualisation, full evaluation, final README |
 
 ---
@@ -202,7 +202,7 @@ flowchart LR
     - `control.reference` (reference follower), `control.baseline` (right-of-way), `control.shield`.
     - Counterfactual conflict metrics now using real suggested actions (X-10).
     - End-to-end `simulate` for every planner × allocator × {reference, baseline} × shield setting.
-    - E3a/E3b; preliminary non-learned E5 numbers.
+    - E3a/E3b; Issue #4 non-learned system-comparison numbers.
   - *Out:* learned controllers, visualisation.
 - **Prerequisites.** #2, #3.
 - **Implementation plan.**
@@ -230,7 +230,7 @@ flowchart LR
   - `feat(control): add reference follower, priority-aware baseline and safety shield`
   - `exp(allocation): add allocation experiments E3 and results`
 - **Scope reconciliation and outcome (Project Issue #4, 2026-11-18).**
-  - **Numbering.** This plan's *Project Issue #4* (this section) is tracked on GitHub as **GitHub issue #8**. This plan's own *Issue #8* (interactive visualisation, full evaluation, final documentation; below) is a different issue, and it is the one `05` §B.4 means when it assigns the *final* E5 to "#8". Elsewhere in this document "Issue #n" means the plan's numbering.
+  - **Numbering.** This plan's *Project Issue #4* (this section) is tracked on GitHub as **GitHub issue #8**. This plan's own *Issue #8* (interactive visualisation, full evaluation, final documentation; below) is a different issue, and it is the one `05` §B.4 means when it assigns E5 and E6 to "#8". Elsewhere in this document "Issue #n" means the plan's numbering.
   - *Scope history.* A temporary narrow scope excluded the reference follower, the shield and X-10. The student's final authorization restored the full scope above and added a **deadlock-detour mechanism (stage 5B)**, which was not in the original plan. Nothing above is deleted. The table records what was delivered against each item.
 
   | Item | Delivered | Evidence |
@@ -244,9 +244,9 @@ flowchart LR
   | Deadlock detour (new, stage 5B) | yes, opt-in, default on for the baseline | `04` §5.5; G21, G22 |
   | End-to-end `simulate`, every planner × allocator × controller × shield | yes, 16 combinations | `tests/integration/test_cli_matrix.py` |
   | E3a / E3b with paired statistics | yes | `05` §B.6 E3 |
-  | Preliminary non-learned E5 | yes: **both non-learned controllers**, baseline and reference follower. Planner × allocator × dynamics × 50 test seeds per controller = 1 200 paired episodes without endpoint recovery; the same instances with endpoint recovery add 1 200 more (2 400 E5 runs in total, `05` §B.6). The baseline half was run first; the reference half was added after the audit. Learned controllers, the shield ablation and the final E5 remain for the plan's Issues #5/#6 (preliminary) and #8 (final). **Not the full E5.** | `05` §B.6 E5 |
+  | Issue #4 non-learned system comparison (stored as `e5_*`) | yes: **both non-learned controllers**, baseline and reference follower. Planner × allocator × dynamics × 50 test seeds per controller = 1 200 paired episodes without endpoint recovery; the same instances with endpoint recovery add 1 200 more (2 400 runs in total, `05` §B.6). The baseline half was run first; the reference half was added after the audit. Learned controllers and the shield ablation remain for the plan's Issues #5/#6 (development comparisons), and E5/E6 for Issue #8. **Not E5.** | `05` §B.6 |
   | NFR-PERF-1 measured (an **A\*** requirement) | yes. **Before** optimisation: not met as a per-step bound (21–29 of ≈ 2 800 steps per run ≥ 20 ms, all first or map-event steps). **After** the follow-up optimisation (O1 flat BFS, O2 component reachability, symmetric field reuse; exact): **met as a strict per-step maximum for workload R on AC power on this machine**, in the original benchmark (max 9.53 ms over 4 401 steps) and in an independent Windows verification (`results/perf_verify/`, max 10.56 ms). Every A\* configuration of the full workload stays below 20 ms (max 15.43 ms). RRT\* is outside NFR-PERF-1; its steps still exceed 20 ms in 23–34 % of workload F, reported as a limitation. An intermediate run on battery power exceeded on 3 of 40 first steps; the final code was not measured on battery. | `05` §B.6 NFR-PERF-1 |
-  | Endpoint recovery (follow-up, approved after the audit) | yes: idle-robot parking and retreat from a persistently held goal, on by default with an allocator for both controllers (`--endpoint off` restores the earlier behaviour). Preliminary E5, baseline: 91 → 8 undelivered tasks, 83 → 8 incomplete episodes, 0 regressions; reference: 1 357 → 1 286. The remaining endpoint cases are reported (`attempts_exhausted`, `unresolved_*_at_end`). No delivery guarantee (G26). | `04` §5.6; `05` §B.6 E5; G25–G27 |
+  | Endpoint recovery (follow-up, approved after the audit) | yes: idle-robot parking and retreat from a persistently held goal, on by default with an allocator for both controllers (`--endpoint off` restores the earlier behaviour). Issue #4 system comparison, baseline: 91 → 8 undelivered tasks, 83 → 8 incomplete episodes, 0 regressions; reference: 1 357 → 1 286. The remaining endpoint cases are reported (`attempts_exhausted`, `unresolved_*_at_end`). No delivery guarantee (G26). | `04` §5.6; `05` §B.6; G25–G27 |
   | Scenario tests X-5 (allocation part) and X-6 | covered by the allocation and CLI integration tests | `tests/integration/test_allocation_integration.py`, `test_cli_matrix.py` |
 
   - *Acceptance criteria.*
@@ -263,7 +263,7 @@ flowchart LR
 
 - **Objective.** Wrap the simulator as a multi-agent RL environment, build the training infrastructure, and implement and train MADQL (*parameter-shared independent Double DQN with team-mixed rewards and action masking*).
 - **Scope.**
-  - *In:* `marl.env`, `observation`, `reward` (base reward + phase-aware potential shaping + team mixing; model §7), `global_state`, `vector_env`, `networks`, `replay`, `madql`, `trainer`, `checkpoint`, `policy`; CLI `train`; curriculum configs; MADQL training (≥ 3 seeds); evaluation vs reference follower and baseline on test seeds.
+  - *In:* `marl.env`, `observation`, `reward` (base reward + phase-aware potential shaping + team mixing; model §7), `global_state`, `vector_env`, `networks`, `replay`, `madql`, `trainer`, `checkpoint`, `policy`; CLI `train`; curriculum configs; MADQL training (≥ 3 seeds); development comparison vs reference follower and baseline on validation block B (seeds 10 020–10 099).
   - *Out:* PPO and the final comparison.
 - **Prerequisites.** #3, #4.
 - **Implementation plan.**
@@ -272,14 +272,14 @@ flowchart LR
   3. Networks, replay and MADQL update (`04` §6 tests 1–5).
   4. Trainer (logging, validation on the validation seed set, checkpoints; X-7, e2e smoke test).
   5. Sanity runs, then full training (≥ 3 seeds, fixed step budget).
-  6. Evaluation on test seeds with paired statistics (preliminary E5 slice).
+  6. Development comparison on validation block B (seeds 10 020–10 099) with paired statistics. Test seeds are not used: E5 and E6 are Issue #8.
 - **Technical decisions.** ADR-3, ADR-6, ADR-10 (shield off in training); model §6–7; replay layout < 300 MB.
 - **Deliverables.** `marl/*` (minus PPO), `configs/training/madql*.toml`, tests, learning curves, E4 (MADQL part).
 - **Testing requirements.** `04` §6 and §8, X-7, X-13, e2e `train`, X-1 with a learned controller.
 - **Acceptance criteria.**
   1. All MADQL L1/L2 tests pass, including chain-MDP learning sanity, and X-13 (shaping telescopes; zero potential at termination).
   2. Training is reproducible from config + seed. Checkpoints round-trip.
-  3. ≥ 3 seeds trained. Curves, validation metrics and paired test comparisons vs the reference follower and baseline are reported, whatever their outcome.
+  3. ≥ 3 seeds trained. Curves, validation metrics and paired held-out development comparisons (validation block B) vs the reference follower and baseline are reported, whatever their outcome.
   4. A trained MADQL policy runs as a selectable controller with both planners, with the shield on or off.
 - **Documentation.** `04` §6 and §8 notes with final hyper-parameters; E4 (MADQL); verification log.
 - **Commit messages.**
@@ -287,6 +287,24 @@ flowchart LR
   - `feat(marl): implement MADQL with replay and Double DQN targets`
   - `feat(marl): add training pipeline, checkpoints and learned controller`
   - `exp(marl): add MADQL training results`
+- **Outcome (Issue #5, 2026-11-19).** What was delivered against each item:
+
+  | Item | Delivered | Evidence |
+  |---|---|---|
+  | `marl.env`, `observation`, `reward`, `global_state`, `vector_env` | yes. Truncation look-ahead and termination precedence as approved; observation dimension 356; no reward clipping | `04` §8 notes; `tests/unit/marl/test_observation.py`, `test_reward.py`; `tests/integration/test_marl_env.py` |
+  | `networks`, `replay`, `madql` | yes. Replay of 200 k transitions in 160.2 MB (`uint8` channels) | `04` §6 notes; `tests/unit/marl/test_madql.py` |
+  | `trainer`, `checkpoint`, `policy`, CLI `train`, `simulate --controller madql --checkpoint` | yes | `tests/integration/test_marl_training.py`, `tests/e2e/test_train_subprocess.py` |
+  | Additional modules (not named in the scope list) | `marl/scenarios.py` (seed blocks, curriculum, validation levels), `marl/evaluation.py` (block-A validation and the selection rule), `marl/devcompare.py` (block-B comparison). The engine also gained opt-in view extras (`reference_paths`, `goal_distance`); traces are byte-identical with and without them | `03` §5 and §7 notes; `tests/integration/test_view_extras.py` |
+  | Curriculum configs | `configs/training/madql.toml` (1 M steps) and `madql_smoke.toml` | `03` §7 |
+  | MADQL training ≥ 3 seeds | yes: run seeds 1, 2 and 3 × 1 000 000 environment steps, A\* only | `05` §B.6 E4 |
+  | Development comparison on validation block B | yes, run once, both planners | `05` §B.6 (Issue #5 development comparison) |
+
+  - *Acceptance criteria* (verification log V-14 and V-15):
+    1. **Met.** The MADQL L1/L2 tests pass, including `test_chain_mdp_learning_sanity` and the X-13 tests (`test_shaping_telescopes_over_recorded_episodes`, zero potential at termination). So does the `training`-marked learning-sanity test against a random policy.
+    2. **Met.** `test_training_is_reproducible_from_config_and_seed` and the X-7 tests (`test_checkpoint_round_trip_identical_actions`, `test_tampered_checkpoint_is_rejected`) pass.
+    3. **Met as a reporting criterion.** Three seeds were trained, and the curves, block-A validation and the paired block-B comparisons against the reference follower and the baseline are reported. **The outcome is negative for task completion:** all three MADQL policies complete fewer tasks than both non-learned controllers. They propose far fewer conflicts than the reference follower.
+    4. **Met.** `madql` is selectable in the CLI with A\* and RRT\* and shield off or predictive: `test_cli_selects_madql` and `test_learned_controller_deterministic_traces`, 4 combinations each, with the RRT\* cases in the slow suite. The block-B comparison ran the policies with both planners.
+  - *Not done here (by scope):* PPO, the reward ablation, RRT\* in training (Issue #6), and E5/E6 (Issue #8). Whether to add the VDN fallback (ADR-3), or to change the budget or hyper-parameters after this result, is left to the student.
 
 ---
 
@@ -296,7 +314,7 @@ flowchart LR
 
 - **Objective.** Implement and train PPO (MAPPO with IPPO switch), then compare it rigorously with MADQL, the baseline and the reference follower.
 - **Scope.**
-  - *In:* `marl.rollout`, `marl.ppo`, trainer integration, PPO configs; training (MAPPO ≥ 3 seeds; IPPO ≥ 1, target 3); reward ablation; complete E4; preliminary E5 incl. shield ablation; X-4 (16 combinations).
+  - *In:* `marl.rollout`, `marl.ppo`, trainer integration, PPO configs; training (MAPPO ≥ 3 seeds; IPPO ≥ 1, target 3); reward ablation; complete E4; development comparison incl. shield ablation (validation block B); X-4 (16 combinations).
   - Also in scope: deciding whether RRT\*-in-training fits the budget (`03` §7), and selecting the final checkpoints for `models/` (ADR-9).
   - *Out:* Kaggle scenarios, viewer, final evaluation.
 - **Prerequisites.** #5.
@@ -306,9 +324,9 @@ flowchart LR
   3. Bandit and chain-MDP sanity.
   4. Training runs and reward ablation.
   5. E4 analysis with paired and two-level bootstrap statistics.
-  6. X-4; preliminary E5.
+  6. X-4; development comparison.
   7. Export inference-only checkpoints with sidecars. Propose to the student which files to commit to `models/`.
-- **Technical decisions.** ADR-4, ADR-9. Fair-comparison protocol: identical scenarios, step budget and test seeds; tuning budgets documented.
+- **Technical decisions.** ADR-4, ADR-9. Fair-comparison protocol: identical scenarios, step budget and seeds (validation block B; test seeds are reserved for Issue #8); tuning budgets documented.
 - **Deliverables.** `marl/ppo.py`, `rollout.py`, `configs/training/ppo*.toml`, tests, E4 results, candidate `models/` files.
 - **Testing requirements.** `04` §7, X-4, X-7 (incl. inference-only export), e2e PPO training smoke test.
 - **Acceptance criteria.**
@@ -317,10 +335,32 @@ flowchart LR
   3. E4 reports curves and comparisons with CIs and effect sizes. Claims are limited to what the data shows, including null or negative results.
   4. All 16 planner × allocator × controller combinations run (X-4).
   5. Committed checkpoints (if any) are < 5 MB, inference-only, with complete sidecars, and approved by the student.
-- **Documentation.** `04` §7 notes; E4 and preliminary E5; verification log. **Checkpoint merge to `main`.**
+- **Documentation.** `04` §7 notes; E4 and the development comparison; verification log. **Checkpoint merge to `main`.**
 - **Commit messages.**
   - `feat(marl): implement PPO with centralised critic and GAE`
   - `exp(marl): add MADQL vs PPO comparative study`
+- **Outcome (Issue #6, 2026-11-20).** What was delivered against each item:
+
+  | Item | Delivered | Evidence |
+  |---|---|---|
+  | `marl.rollout`, `marl.ppo`, trainer integration | yes. One PPO core with the MAPPO / IPPO critic switch; a separate PPO trainer with resume (the MADQL trainer is unchanged) | `04` §7 notes; `tests/unit/marl/test_rollout.py`, `test_ppo.py`, `test_ppo_sanity.py`; `tests/integration/test_ppo_rollout.py`, `test_ppo_training.py` |
+  | PPO configs | `configs/training/{mappo,ippo,ppo_smoke}.toml` and the ablation cells `mappo_{zeta0,beta0,crr05,crr2}.toml` | `03` §7 |
+  | Training: MAPPO ≥ 3 seeds; IPPO ≥ 1 (target 3) | yes: MAPPO and IPPO × run seeds 1–3 × 1 000 000 environment steps, A\* only | `05` §B.6 E4 (PPO part) |
+  | Reward ablation | yes, Option C (approved D3): ζ = 0, β = 0, $c_{\text{rr}}$ = 0.5, $c_{\text{rr}}$ = 2 on MAPPO × 2 seeds | `05` §B.6 E4 reward ablation |
+  | Complete E4 | yes: curves, steps to threshold, stability, cost and memory for MADQL and PPO; H5 assessed | `05` §B.6 E4 |
+  | Development comparison on block B, incl. the shield ablation | yes, plus the matched baseline (D11) and the stochastic diagnostic (D6) | `05` §B.6 (Issue #6 development comparison) |
+  | X-4 (16 combinations) | yes, plus the 8 shielded learned-controller variants | `tests/integration/test_x4_matrix.py` |
+  | RRT\*-in-training decision | measured (pilot): **borderline** (36.3 h untrained, 5.9 h reference-follower, threshold 24 h). Not added; the decision is the student's | V-17; `03` §7 |
+  | `models/` checkpoints | candidates identified, **none committed**; awaiting the student's approval | V-18 |
+  | Additional modules | `marl/pilot.py` (RRT\* pilot), `marl/study.py` (block-B experiments and analysis); additive extensions to `vector_env`, `checkpoint`, `policy`, `evaluation`, `devcompare` and the CLI | `03` §5.6 notes; V-16 |
+
+  - *Acceptance criteria* (verification log V-16 to V-18):
+    1. **Met.** All PPO L1/L2 tests pass, including the masked bandit and the chain MDP for both variants, R1–R6 (truncation bootstrap through the vector environment), and the `training`-marked improvement test against a random policy.
+    2. **Met.** MADQL (Issue #5) and MAPPO and IPPO (Issue #6) are each trained with 3 seeds under the documented common budget of 1 000 000 environment steps, with the same composition, curriculum, scenario order and selection rule.
+    3. **Met as a reporting criterion.** E4 reports curves and block-B comparisons with CIs and effect sizes. Negative and null results are reported: MADQL's completion shortfall stands; the reward ablation shows no completion effect and its other differences are confounded with the selected step; PPO proposes more conflicts than the baselines and its completion is below the resolver-equipped baseline.
+    4. **Met.** All 16 planner × allocator × controller combinations run (X-4), plus each learned controller with the shield on.
+    5. **Pending the student's decision.** No checkpoint is committed. Candidate inference-only files (636 401 bytes each, < 5 MB) with complete sidecars are proposed for approval.
+  - *Not done here (by scope):* E5/E6 on test seeds (Issue #8), Kaggle scenarios (Issue #7), VDN (deferred by the student). Open decisions for the student: RRT\* in training, the `models/` files, and whether to revise the completion-first selection rule now that completion saturates near 0.99.
 
 ---
 

@@ -153,6 +153,15 @@ class _MonitoredCoordinator:
         assert self.monitor is not None
         return [self.monitor.suggested(r.id, r.position) for r in view.robots]
 
+    def reference_paths(self, limit: int) -> tuple[tuple[Cell, ...] | None, ...]:
+        """Remaining reference path per robot, at most ``limit`` moves (``PathReporting``)."""
+        assert self.monitor is not None
+        out: list[tuple[Cell, ...] | None] = []
+        for i in range(len(self.monitor.states)):
+            path = self.monitor.reference_path(i)
+            out.append(None if path is None else path[: limit + 1])
+        return tuple(out)
+
     # ------------------------------------------------------------------ reporting (engine hooks)
     def plan_valid(self) -> tuple[bool, ...]:
         assert self.monitor is not None
@@ -217,6 +226,12 @@ class _MonitoredCoordinator:
             "leg_moves_over_static": move_ratio,
             "releases": self.releases,
             "work": dict(work),
+            # additive, only with repair on (Issue 6A Phase 1)
+            **(
+                {"repairs": mon.repairs, "repair_failures": mon.repair_failures}
+                if self.monitor_params.repair_radius > 0
+                else {}
+            ),
         }
 
     def call_times(self) -> list[float]:
@@ -343,6 +358,16 @@ class AllocationCoordinator(_MonitoredCoordinator):
                     )
                 )
         return out
+
+    def detour_members(self) -> frozenset[int]:
+        """Robots that are members of an active deadlock detour (read-only; Issue 6A Phase 3).
+        Empty without the resolver."""
+        if self.resolver is None:
+            return frozenset()
+        out: set[int] = set()
+        for d in self.resolver.detours.values():
+            out.update(d.members)
+        return frozenset(out)
 
     def _skip_release(self, robot: int) -> bool:
         return (self.resolver is not None and self.resolver.in_detour(robot)) or (

@@ -45,9 +45,10 @@ from robocoord.sim.metrics import EpisodeMetrics
 from robocoord.sim.text_render import enable_windows_ansi, render_frame
 from robocoord.sim.trace import TraceWriter
 
-CONTROLLERS = ("scripted", "random", "stay", "follow", "reference", "baseline")
+CONTROLLERS = ("scripted", "random", "stay", "follow", "reference", "baseline", "madql", "ppo")
 ALLOCATORS = ("auction", "sequential")
-PLAN_CONTROLLERS = ("follow", "reference", "baseline")  # need suggested actions (--planner)
+PLAN_CONTROLLERS = ("follow", "reference", "baseline", "madql", "ppo")  # need --planner
+LEARNED_CONTROLLERS = ("madql", "ppo")  # need --checkpoint
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,7 +68,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="scripted (default if the scenario has a [script]), random (masked), stay, "
         "follow (plays the planner's suggested actions; default with --planner), "
         "reference (reference follower, Issue #4), baseline (right-of-way baseline, Issue #4; "
-        "default with --allocator)",
+        "default with --allocator), madql (learned Q-network, Issue #5) or ppo (learned "
+        "MAPPO/IPPO actor, Issue #6); both need --checkpoint",
+    )
+    sim.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=None,
+        help="inference checkpoint (.pt with its .json sidecar) for --controller madql|ppo",
     )
     sim.add_argument(
         "--planner",
@@ -129,6 +137,22 @@ def build_parser() -> argparse.ArgumentParser:
     exp.add_argument("--out", type=Path, default=None, help="output directory override")
     exp.add_argument("--workers", type=int, default=None, help="parallel worker processes")
     exp.add_argument("--limit", type=int, default=None, help="run at most N new runs (smoke)")
+
+    tr = sub.add_parser(
+        "train",
+        help="train a MADQL (Issue #5) or PPO (Issue #6, a config with a [ppo] table) policy; "
+        "needs the marl extra",
+    )
+    tr.add_argument("--config", required=True, type=Path, help="training TOML file")
+    tr.add_argument("--out", required=True, type=Path, help="new output directory")
+    tr.add_argument("--seed", type=int, default=None, help="override run.run_seed")
+    tr.add_argument("--total-steps", type=int, default=None, help="override run.total_steps")
+    tr.add_argument(
+        "--resume",
+        action="store_true",
+        help="PPO only: continue the run in --out from its latest training checkpoint "
+        "(iteration boundary; not bitwise identical to an uninterrupted run)",
+    )
     return parser
 
 
@@ -161,6 +185,7 @@ def make_controller(
     allocator: str | None = None,
     deadlock: bool = False,
     endpoint: bool = False,
+    checkpoint: Path | None = None,
 ) -> tuple[Controller, Coordinator]:
     if allocator is not None:
         from robocoord.allocation.auction import AuctionAllocator
@@ -188,7 +213,7 @@ def make_controller(
             deadlock=DetourParams() if deadlock else None,
             endpoint=EndpointParams() if endpoint else None,
         )
-        return _plan_controller(name), acoord
+        return _plan_controller(name, checkpoint), acoord
     if planner is not None:
         from robocoord.planning import make_planner
         from robocoord.planning.coordinator import PlanningCoordinator
@@ -204,7 +229,7 @@ def make_controller(
         )
         coord = PlanningCoordinator(make_planner(planner, **options), spec.script.assignments)
         if name in PLAN_CONTROLLERS:
-            return _plan_controller(name), coord
+            return _plan_controller(name, checkpoint), coord
         if name == "random":
             return RandomController(make_streams(seed).generator("policy")), coord
         if name == "stay":
@@ -226,7 +251,9 @@ def make_controller(
     return StayController(), coordinator
 
 
-def _plan_controller(name: str) -> Controller:
+def _plan_controller(name: str, checkpoint: Path | None = None) -> Controller:
+    if name in LEARNED_CONTROLLERS:
+        return _learned_controller(checkpoint, name)
     if name == "reference":
         from robocoord.control.reference import ReferenceFollower
 
@@ -236,6 +263,32 @@ def _plan_controller(name: str) -> Controller:
 
         return BaselineController()
     return SuggestionFollower()
+
+
+def _require_torch() -> None:
+    try:
+        import torch  # noqa: F401
+    except ImportError:  # pragma: no cover - depends on the installation
+        raise ConfigError(
+            "marl",
+            'PyTorch is not installed; install the marl extra: pip install -e ".[marl]" '
+            "--extra-index-url https://download.pytorch.org/whl/cpu",
+        ) from None
+
+
+def _learned_controller(checkpoint: Path | None, name: str = "madql") -> Controller:
+    if checkpoint is None:
+        raise ConfigError("checkpoint", f"--controller {name} needs --checkpoint FILE.pt")
+    if not checkpoint.exists() or not checkpoint.with_suffix(".json").exists():
+        raise ConfigError("checkpoint", f"{checkpoint} or its .json sidecar does not exist")
+    _require_torch()
+    from robocoord.marl.policy import LearnedController
+
+    ctrl = LearnedController.from_checkpoint(checkpoint)
+    if (ctrl.output == "logits") != (name == "ppo"):
+        kind = "a PPO actor" if ctrl.output == "logits" else "a MADQL Q-network"
+        raise ConfigError("checkpoint", f"{checkpoint} holds {kind}, not a {name} policy")
+    return ctrl
 
 
 def format_metrics(m: EpisodeMetrics) -> str:
@@ -347,6 +400,7 @@ def cmd_simulate(args: argparse.Namespace) -> int:
         args.allocator,
         deadlock,
         endpoint,
+        args.checkpoint,
     )
     shield = None
     if args.shield != "off":
@@ -354,6 +408,14 @@ def cmd_simulate(args: argparse.Namespace) -> int:
 
         shield = Shield(args.shield)
     stats = getattr(controller, "episode_stats", None)
+    extras: frozenset[str] = frozenset()
+    path_limit = 16
+    if controller_name in LEARNED_CONTROLLERS:
+        from robocoord.marl.policy import LearnedController
+
+        assert isinstance(controller, LearnedController)
+        extras = frozenset({"paths", "goal_distance"})  # the learned observation needs them
+        path_limit = controller.builder.params.path_cells
     trace = TraceWriter(args.trace) if args.trace else None
     ansi_ok = enable_windows_ansi()
     color = args.color and ansi_ok
@@ -365,7 +427,11 @@ def cmd_simulate(args: argparse.Namespace) -> int:
             stop_when_done=not args.run_to_max,
             max_steps=args.max_steps,
             shield=shield,
-            controller_stats=stats if controller_name in ("reference", "baseline") else None,
+            controller_stats=stats
+            if controller_name in ("reference", "baseline", *LEARNED_CONTROLLERS)
+            else None,
+            view_extras=extras,
+            path_limit=path_limit,
         )
         controller.reset(len(engine.robots))
         animate = not args.no_animate and not args.json
@@ -431,6 +497,25 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_train(args: argparse.Namespace) -> int:
+    _require_torch()
+    from robocoord.marl.ppo_trainer import is_ppo_config, load_ppo_config, train_ppo
+
+    if is_ppo_config(args.config):
+        pcfg = load_ppo_config(args.config, run_seed=args.seed, total_steps=args.total_steps)
+        summary = train_ppo(pcfg, args.out, resume=args.resume)
+        print(json.dumps(summary, indent=2))
+        return 0
+    if args.resume:
+        raise ConfigError("resume", "--resume is supported for PPO configurations only")
+    from robocoord.marl.trainer import load_training_config, train
+
+    cfg = load_training_config(args.config, run_seed=args.seed, total_steps=args.total_steps)
+    summary = train(cfg, args.out)
+    print(json.dumps(summary, indent=2))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -440,6 +525,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             from robocoord.experiments.runner import run_experiment_cli
 
             return run_experiment_cli(args.config, args.out, args.workers, args.limit)
+        if args.command == "train":
+            return cmd_train(args)
         return cmd_validate(args)
     except ScenarioError as exc:
         print(f"scenario error: {exc}", file=sys.stderr)
