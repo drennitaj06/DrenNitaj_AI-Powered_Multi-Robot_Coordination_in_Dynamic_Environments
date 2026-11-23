@@ -2,3 +2,16 @@
 # (tools/selection/block_d_analysis.py) hash the CRLF bytes of the Windows checkout. Check this
 # file out with CRLF on every platform so the recorded SHA-256 verifies on Linux CI as well.
 tools/selection/block_c_analysis.py text eol=crlf
+
+# Frozen with LF bytes (Block D, Stage 3a and Phase 6 freeze records): check these out with LF on
+# every platform so the recorded SHA-256 values verify after any checkout.
+src/robocoord/control/supervisor.py text eol=lf
+src/robocoord/marl/evaluation.py text eol=lf
+src/robocoord/planning/rrtstar.py text eol=lf
+tests/tools/test_block_d.py text eol=lf
+tools/diagnostics/replay_failures.py text eol=lf
+tools/diagnostics/stage3a_calibration.py text eol=lf
+tools/phase1/phase1.py text eol=lf
+tools/phase2/phase2.py text eol=lf
+tools/phase3/observer.py text eol=lf
+tools/phase3/phase3.py text eol=lf
