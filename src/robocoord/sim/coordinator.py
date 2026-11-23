@@ -66,6 +66,14 @@ class PlanReporting(Protocol):
 
 
 @runtime_checkable
+class DetourReporting(Protocol):
+    """Optional extension (Issue 6A Phase 3): the robots that are members of an active deadlock
+    detour, read by the Execution Supervisor. Read-only; no side effect."""
+
+    def detour_members(self) -> frozenset[int]: ...
+
+
+@runtime_checkable
 class PathReporting(Protocol):
     """Optional extension of a planning coordinator (Issue #5): the current reference path of
     every robot, read by the engine only when ``view_extras`` asks for paths."""

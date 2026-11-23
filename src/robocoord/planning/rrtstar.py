@@ -35,7 +35,8 @@ from robocoord.planning.neighbors import make_index
 class RRTStarConfig:
     """RRT* parameters (``04`` §3.1).
 
-    * ``max_iterations`` — iteration budget ``n_max`` (RRT* is anytime: all iterations are run).
+    * ``max_iterations`` — iteration budget ``n_max`` (RRT* is anytime: all iterations are run
+      unless a P2 rule below is set).
     * ``eta`` — steer step ``η`` in cells; also the cap of the near radius ``r_n`` (default 2.0,
       chosen by a documented pilot, see ``04`` §3 implementation notes).
     * ``goal_bias`` — probability ``p_g`` of sampling uniformly inside the goal cell.
@@ -49,6 +50,19 @@ class RRTStarConfig:
     * ``check_invariants`` — verify the tree-cost invariant after every iteration (tests; O(n)).
     * ``stop_on_first_solution`` — stop as soon as the goal region is reached (RRT-like, no
       further improvement). Off by default; used where only feasibility matters (test X-11).
+    * ``refine_iterations`` — budget control (Issue 6A P2), off when ``None`` (default): after the
+      first solution (iteration ``i₁``), stop once iteration ``i₁ + k`` has completed.
+      ``k = 0`` stops at the first solution.
+    * ``patience`` — budget control (P2), off when ``None`` (default): after the first solution,
+      stop once ``m`` consecutive iterations have passed without a strict decrease of the best
+      goal cost.
+
+    Both P2 rules are deterministic (iteration counts, never wall time), act only after a solution
+    exists and only end the loop early. A stopped run is therefore an exact prefix of the
+    full-budget run with the same random stream: the same tree up to the stop, the returned path
+    is the best path of that prefix (valid, G5), its cost is ≥ the full run's best cost, and a
+    query without a solution runs the whole budget and fails exactly as before. If both rules are
+    set, the first one to trigger stops the run.
     """
 
     max_iterations: int = 2000
@@ -61,10 +75,24 @@ class RRTStarConfig:
     record_trace: bool = False
     check_invariants: bool = False
     stop_on_first_solution: bool = False
+    refine_iterations: int | None = None
+    patience: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_iterations < 0:
             raise ConfigError("rrtstar.max_iterations", "must be >= 0")
+        if self.refine_iterations is not None and (
+            isinstance(self.refine_iterations, bool)
+            or not isinstance(self.refine_iterations, int)
+            or self.refine_iterations < 0
+        ):
+            raise ConfigError("rrtstar.refine_iterations", "must be None or an integer >= 0")
+        if self.patience is not None and (
+            isinstance(self.patience, bool)
+            or not isinstance(self.patience, int)
+            or self.patience < 1
+        ):
+            raise ConfigError("rrtstar.patience", "must be None or an integer >= 1")
         if not self.eta > 0:
             raise ConfigError("rrtstar.eta", "must be > 0")
         if not 0.0 <= self.goal_bias <= 1.0:
@@ -159,6 +187,8 @@ class RRTStarPlanner:
             {f: [] for f in TRACE_FIELDS} if cfg.record_trace else None
         )
         timed_out = False
+        refine, patience = cfg.refine_iterations, cfg.patience  # P2 budget control (None = off)
+        last_best, last_improved = math.inf, 0
         it = 0
         for it in range(1, cfg.max_iterations + 1):
             if cfg.time_limit_s is not None and time.perf_counter() - t0 > cfg.time_limit_s:
@@ -270,6 +300,13 @@ class RRTStarPlanner:
                 self._check_tree(xs, ys, parent, cost, ecost, free, w, h, penal, heavy)
             if cfg.stop_on_first_solution and best_node >= 0:
                 break
+            if best_node >= 0 and (refine is not None or patience is not None):
+                if best < last_best:
+                    last_best, last_improved = best, it
+                if refine is not None and it - first_solution >= refine:
+                    break
+                if patience is not None and it - last_improved >= patience:
+                    break
 
         stats = PlanStats(
             planner=self.name,

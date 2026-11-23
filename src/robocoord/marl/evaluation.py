@@ -15,6 +15,18 @@ The allocator is the auction unless a task names the sequential auction (shield 
 #6). Stochastic episodes draw from ``SeedSequence([tag, scenario seed, level index, replicate])``,
 which does not depend on the policy, so every policy faces the same stream per instance.
 
+Issue 6A Phase 3 (both off by default; records are then unchanged): ``deadlock`` enables the
+deadlock resolver explicitly for any controller (``None`` keeps the original rule: on for the
+baseline only), and ``supervisor`` installs the Execution Supervisor (``control.supervisor``;
+learned controllers only) between the policy and the shield. A record then also carries
+``supervisor``, ``supervisor_stats`` and ``calls_by_trigger``. An optional ``observer`` (Phase 3
+experiments) sees every step read-only (``before(engine, view, actions)`` /
+``after(engine, outcome)``); it never changes the episode or the record. ``repair`` (Issue 6A
+Phase 1, P1; default 0 = off) sets the path monitor's T3 repair radius; a record then also carries
+``repair_radius``, ``repairs``, ``repair_failures`` and ``calls_by_trigger``. ``rrt_refine`` and
+``rrt_patience`` (Issue 6A Phase 2, P2; default ``None`` = off) set the RRT* budget-control
+rules (``RRTStarConfig.refine_iterations`` / ``patience``); a record then also carries them.
+
 Per episode it records the task completion, the mean over robots of the discounted *base* return
 (model §7 without potential-based shaping; the mean is the same for every ``β`` because team
 mixing preserves the sum), conflicts and the engine's episode metrics. NumPy only, except that
@@ -46,7 +58,7 @@ import zlib
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -57,6 +69,11 @@ from robocoord.marl.scenarios import LEVELS, check_seeds
 from robocoord.sim.engine import Engine
 from robocoord.world.entities import RobotMode
 
+#: EvalTask fields that are not copied into a record (the checkpoint is stored by file name;
+#: the Phase 3 switches are recorded only when used, so default records are unchanged).
+_NON_RECORD_FIELDS = frozenset(
+    {"checkpoint", "supervisor", "deadlock", "repair", "rrt_refine", "rrt_patience"}
+)
 CONTROLLERS = ("baseline", "baseline-noresolver", "reference", "madql", "ppo")
 LEARNED = ("madql", "ppo")
 MODES = ("greedy", "stochastic")
@@ -82,6 +99,11 @@ class EvalTask:
     allocator: str = "auction"
     mode: str = "greedy"
     replicate: int = 0
+    supervisor: str = "off"  # Issue 6A Phase 3: "off", "full" or a subset like "R+S"
+    deadlock: bool | None = None  # None: resolver on for the baseline only (original rule)
+    repair: int = 0  # Issue 6A Phase 1 (P1): T3 repair radius of the path monitor; 0 = off
+    rrt_refine: int | None = None  # Issue 6A Phase 2 (P2): RRT* refinement budget k; None = off
+    rrt_patience: int | None = None  # Issue 6A Phase 2 (P2): no-improvement window m; None = off
 
 
 def stochastic_rng(task: EvalTask) -> np.random.Generator:
@@ -90,6 +112,11 @@ def stochastic_rng(task: EvalTask) -> np.random.Generator:
     return np.random.default_rng(
         np.random.SeedSequence([STOCHASTIC_TAG, task.seed, level, task.replicate])
     )
+
+
+def resolver_enabled(task: EvalTask) -> bool:
+    """The deadlock resolver switch: explicit, or the original rule (baseline only)."""
+    return task.controller == "baseline" if task.deadlock is None else task.deadlock
 
 
 def _system(task: EvalTask) -> tuple[Any, Any, frozenset[str]]:
@@ -104,11 +131,25 @@ def _system(task: EvalTask) -> tuple[Any, Any, frozenset[str]]:
     cfg = EnvConfig(
         planner=task.planner,
         allocator=task.allocator,
-        deadlock=task.controller == "baseline",
+        deadlock=resolver_enabled(task),
         endpoint=True,
         rrt_iterations=task.rrt_iterations if task.planner == "rrtstar" else None,
     )
     coord = make_coordinator(cfg)
+    if task.repair:
+        from dataclasses import replace
+
+        coord.monitor_params = replace(coord.monitor_params, repair_radius=task.repair)
+    if task.rrt_refine is not None or task.rrt_patience is not None:
+        if task.planner != "rrtstar":
+            raise ValueError("RRT* budget control (rrt_refine, rrt_patience) needs rrtstar")
+        from dataclasses import replace
+
+        coord.planner.config = replace(
+            coord.planner.config,
+            refine_iterations=task.rrt_refine,
+            patience=task.rrt_patience,
+        )
     if task.controller in ("baseline", "baseline-noresolver"):
         from robocoord.control.baseline import BaselineController
 
@@ -134,18 +175,41 @@ def _system(task: EvalTask) -> tuple[Any, Any, frozenset[str]]:
     return coord, ctrl, VIEW_EXTRAS
 
 
-def run_episode(task: EvalTask, reward: RewardParams | None = None) -> dict[str, Any]:
-    """Run one episode and return its record (deterministic for a fixed task)."""
+class EpisodeObserver(Protocol):
+    """Read-only per-step hook of :func:`run_episode` (Issue 6A Phase 3 experiments)."""
+
+    def before(self, engine: Engine, view: Any, actions: dict[int, Action]) -> None: ...
+
+    def after(self, engine: Engine, outcome: Any) -> None: ...
+
+
+def run_episode(
+    task: EvalTask,
+    reward: RewardParams | None = None,
+    *,
+    observer: EpisodeObserver | None = None,
+) -> dict[str, Any]:
+    """Run one episode and return its record (deterministic for a fixed task). ``observer``
+    (optional, read-only) is called around every step; it does not change the record."""
     check_seeds([task.seed], task.block)
     reward = reward or RewardParams()
     spec = LEVELS[task.level].sample(task.seed)
     coord, ctrl, extras = _system(task)
+    supervisor = None
+    if task.supervisor != "off":
+        if task.controller not in LEARNED:
+            raise ValueError("the execution supervisor applies to learned controllers only")
+        from robocoord.control.supervisor import ExecutionSupervisor, frozen_params
+
+        supervisor = ExecutionSupervisor(task.supervisor, frozen_params(task.planner))
     shield = None
     if task.shield != "off":
         from robocoord.control.shield import Shield
 
         shield = Shield(task.shield)
-    engine = Engine(spec, coord, shield=shield, view_extras=extras, path_limit=6)
+    engine = Engine(
+        spec, coord, shield=shield, supervisor=supervisor, view_extras=extras, path_limit=6
+    )
     ctrl.reset(len(engine.robots))
     n = len(engine.robots)
     ret = np.zeros(n)
@@ -164,7 +228,11 @@ def run_episode(task: EvalTask, reward: RewardParams | None = None) -> dict[str,
         nonidle = [r.mode is not RobotMode.IDLE for r in engine.robots]
         actions: dict[int, Action] = ctrl.act(view)
         t_act += time.perf_counter() - ta
+        if observer is not None:
+            observer.before(engine, view, actions)
         outcome = engine.apply_actions(actions)
+        if observer is not None:
+            observer.after(engine, outcome)
         prios = {tid: engine.book.tasks[tid].priority for _, tid in outcome.delivered}
         ret += disc * step_rewards(reward, nonidle, outcome, prios, zeros, zeros).base
         disc *= reward.gamma
@@ -175,8 +243,8 @@ def run_episode(task: EvalTask, reward: RewardParams | None = None) -> dict[str,
     planning = m["extra"].get("planning", {})
     shield_stats = m["extra"].get("shield") or {}
     delivered = m["tasks_delivered"]
-    return {
-        **{k: v for k, v in asdict(task).items() if k != "checkpoint"},
+    rec = {
+        **{k: v for k, v in asdict(task).items() if k not in _NON_RECORD_FIELDS},
         "checkpoint": os.path.basename(task.checkpoint) if task.checkpoint else None,
         "steps": m["steps"],
         "terminated": engine.terminated,
@@ -200,11 +268,24 @@ def run_episode(task: EvalTask, reward: RewardParams | None = None) -> dict[str,
         "conflicts_per_delivered": m["conflicts_total"] / delivered if delivered else None,
         "shaped_return": float((ret + shaping).mean()),
         "shield_interventions": shield_stats.get("interventions", 0),
-        "deadlock": task.controller == "baseline",
+        "deadlock": resolver_enabled(task),
         "makespan": m["makespan"],
         "prepare_s": t_prepare,
         "act_s": t_act,
     }
+    if supervisor is not None:  # additive fields only when configured (design D8)
+        rec["supervisor"] = task.supervisor
+        rec["supervisor_stats"] = m["extra"].get("supervisor")
+        rec["calls_by_trigger"] = planning.get("calls_by_trigger")
+    if task.repair:  # additive fields only when configured (Issue 6A Phase 1)
+        rec["repair_radius"] = task.repair
+        rec["repairs"] = planning.get("repairs")
+        rec["repair_failures"] = planning.get("repair_failures")
+        rec["calls_by_trigger"] = planning.get("calls_by_trigger")
+    if task.rrt_refine is not None or task.rrt_patience is not None:  # Issue 6A Phase 2 (P2)
+        rec["rrt_refine"] = task.rrt_refine
+        rec["rrt_patience"] = task.rrt_patience
+    return rec
 
 
 def _phi(engine: Engine) -> Any:
